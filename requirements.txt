@@ -1,2 +1,4 @@
-Flask>=3.1,<4
-pyodbc>=5.2,<6
+Flask
+pyodbc
+pypdf
+gunicorn
