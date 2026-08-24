@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Entregas | SGFE WEB</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+.delivery-list{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid #123f41;border-radius:12px;background:linear-gradient(145deg,#071011,#050809)}
+.delivery-list th{padding:15px 14px;text-align:left;color:#12d8de;font-size:12px;letter-spacing:.5px;border-bottom:1px solid #123f41;white-space:nowrap}
+.delivery-list td{padding:16px 14px;border-bottom:1px solid #102f31;vertical-align:middle}
+.delivery-list tr:last-child td{border-bottom:0}.delivery-list tr:hover td{background:#091819}
+.os{font-size:18px;font-weight:900;color:#fff;letter-spacing:.5px}.athlete{font-size:17px;font-weight:900;color:#fff}.money{font-size:16px;font-weight:900;color:#fff}.sub{font-size:12px;color:#819596;margin-top:4px}.status{font-weight:900;font-size:13px;line-height:1.2}.status.ok{color:#25d17a}.status.pending{color:#ffae3d}.status.danger{color:#ff5964}.actions{display:flex;gap:7px;flex-wrap:wrap}.actions form{margin:0}.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;background:#0b5b5e;color:#fff;border:1px solid #12d8de;border-radius:8px;padding:10px 14px;font-weight:900;cursor:pointer}.btn.wa{background:#18a85a;border-color:#18a85a}.btn-light{background:#12383a;border-color:#2b7c7f}.empty{padding:28px;text-align:center;color:#819596}
+.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.76);z-index:9999;align-items:center;justify-content:center;padding:20px}.modal-backdrop.show{display:flex}.payment-modal{width:min(560px,100%);background:linear-gradient(145deg,#0b1718,#050809);border:1px solid #176568;border-radius:14px;box-shadow:0 20px 70px rgba(0,0,0,.65);padding:24px;color:#fff}.payment-modal h2{margin:0 0 6px}.payment-modal .muted{margin:0 0 18px;color:#819596}.payment-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.payment-field label{display:block;color:#819596;font-size:11px;font-weight:900;margin-bottom:6px}.payment-field input,.payment-field select{width:100%;box-sizing:border-box;background:#050b0c;color:#fff;border:1px solid #185154;border-radius:8px;padding:12px}.payment-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}.btn-cancel{background:#172526;border-color:#31585a}.modal-msg{margin-bottom:14px;padding:10px 12px;border-radius:8px;background:#092729;border:1px solid #176568;color:#a9ffff}@media(max-width:900px){.delivery-list{font-size:13px}.delivery-list th,.delivery-list td{padding:11px 9px}.payment-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="shell">
+<header class="topbar"><div class="brand"><div class="brand-mark"><img src="{{ url_for('static', filename='img/logo_fg.png') }}" alt="FG Fotos Esportivas"></div></div><div class="sgfe-head"><div class="sgfe-title">SGFE WEB</div><div class="sgfe-subtitle">SISTEMA DE GESTÃO FG FOTOS ESPORTIVAS</div></div><div class="event-box"><span>SGFE</span><strong>Entregas</strong><small>Banco Access conectado</small></div></header>
+<div class="layout"><aside class="sidebar"><a class="menu" href="/"><b>⌂</b> Painel</a><a class="menu" href="/atletas"><b>♙</b> Atletas</a><a class="menu" href="/agendamentos"><b>◫</b> Agendamentos</a><a class="menu" href="/vendas"><b>◎</b> Vendas / Pacotes</a><a class="menu active" href="/entregas"><b>✓</b> Entregas</a><a class="menu" href="/pagamentos"><b>$</b> Pagamentos</a><a class="menu" href="/historico"><b>▤</b> Histórico</a><a class="menu" href="/configuracoes"><b>⚙</b> Configurações</a></aside>
+<main class="main"><div class="page-actions"><a class="nav-btn" href="/">⌂ MENU PRINCIPAL</a><a class="nav-btn back-btn" href="#" onclick="history.back(); return false;">← VOLTAR</a></div>
+<div class="page-head"><div><a class="back" href="/">← Painel</a><h1>Entregas</h1><p class="muted">Escolha o evento para acompanhar entrega e pagamento dos atletas.</p></div></div>
+{% if mensagem %}<div class="notice">{{ mensagem }}</div>{% endif %}{% if erro %}<div class="error">{{ erro }}</div>{% endif %}
+<form class="filters" method="get"><input class="field" name="q" value="{{ search }}" placeholder="Pesquisar atleta..."><select class="field" name="evento" onchange="this.form.submit()"><option value="">Selecione o evento...</option>{% for e in eventos %}<option value="{{ e.id }}" {% if e.id==evento_selecionado %}selected{% endif %}>{{ e.nome }} — {{ e.data }}{% if e.cidade %} — {{ e.cidade }}{% endif %}</option>{% endfor %}</select><button class="btn" type="submit">CONSULTAR</button></form>
+{% if evento_selecionado %}<div class="count">{{ data|length }} atleta(s) encontrado(s)</div><div class="list-wrap"><table class="delivery-list"><thead><tr><th>OS</th><th>ATLETA</th><th>PROVAS</th><th>VALOR</th><th>ENTREGA</th><th>PAGAMENTO</th><th>AÇÕES</th></tr></thead><tbody>
+{% for r in data %}<tr><td><div class="os">{{ '%06d'|format(r.id) }}</div><div class="sub">{{ r.data_evento }}</div></td><td><div class="athlete">{{ r.atleta }}</div><div class="sub">{{ r.evento }}</div></td><td><strong>{{ r.provas }}</strong><div class="sub">prova(s)</div></td><td><div class="money">R$ {{ '%.2f'|format(r.valor)|replace('.',',') }}</div></td><td>{% if r.entregue %}<div class="status ok">✓ ENTREGUE</div><div class="sub">{{ r.data_finalizacao }}</div>{% else %}<div class="status pending">◷ PENDENTE</div><div class="sub">Não entregue</div>{% endif %}</td><td>{% if r.cortesia %}<div class="status ok">🎁 CORTESIA</div><div class="sub">Sem pagamento em aberto</div>{% elif r.pago %}<div class="status ok">✓ PAGO</div><div class="sub">Pagamento confirmado</div>{% else %}<div class="status danger">✕ EM ABERTO</div><div class="sub">Pagamento pendente</div>{% endif %}</td><td><div class="actions">
+{% if not r.entregue %}<form class="entrega-form" data-id="{{ r.id }}" data-pago="{{ '1' if r.pago else '0' }}" data-atleta="{{ r.atleta|e }}" data-valor="{{ '%.2f'|format(r.valor)|replace('.',',') }}" data-evento="{{ r.evento|e }}"><button class="btn" type="submit">✓ ENTREGAR</button></form>{% endif %}
+{% if r.entregue and not r.pago and not r.cortesia %}<a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/{{ r.telefone|replace('(','')|replace(')','')|replace('-','')|replace(' ','')|replace('+','') }}?text={{ ('Olá, ' ~ (r.contato or r.atleta) ~ '!\n\nAs fotos do evento ' ~ r.evento ~ ' já foram entregues.\n\nIdentificamos que o pagamento do pacote ainda está em aberto.\nValor: R$ ' ~ ('%.2f'|format(r.valor)|replace('.',',')) ~ '.\n\nSe precisar, posso enviar os dados para pagamento.\n\nFernando - Fotografia Esportiva')|urlencode }}">WHATSAPP</a><button class="btn btn-light" type="button" onclick="abrirPagamento({{ r.id }}, '{{ r.atleta|replace("'","\\'") }}', '{{ r.evento|replace("'","\\'") }}', '{{ '%.2f'|format(r.valor)|replace('.',',') }}')">💰 REGISTRAR PAGAMENTO</button>{% endif %}
+</div></td></tr>{% else %}<tr><td colspan="7" class="empty">Nenhum atleta encontrado para este evento.</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="module-card empty">Selecione um evento para visualizar os atletas e a situação de entrega/pagamento.</div>{% endif %}
+</main></div></div>
+
+<div id="paymentModal" class="modal-backdrop" aria-hidden="true"><div class="payment-modal" role="dialog" aria-modal="true" aria-labelledby="paymentTitle"><h2 id="paymentTitle">Registrar pagamento</h2><p id="paymentInfo" class="muted"></p><form method="post" action="/pagamentos/registrar"><input type="hidden" id="paymentVenda" name="id_venda"><div class="payment-grid"><div class="payment-field"><label>FORMA DE PAGAMENTO</label><select name="id_forma" required><option value="">Selecione...</option>{% for f in formas_pagamento %}<option value="{{ f.id }}">{{ f.nome }}</option>{% endfor %}</select></div><div class="payment-field"><label>PARCELAS</label><input type="number" name="parcelas" value="1" min="1"></div><div class="payment-field"><label>VALOR PAGO</label><input id="paymentValor" name="valor_pago" required></div><div class="payment-field"><label>OBSERVAÇÕES</label><input name="observacoes"></div></div><div class="payment-actions"><button class="btn btn-cancel" type="button" onclick="fecharPagamento()">CANCELAR</button><button class="btn" type="submit">✓ CONFIRMAR PAGAMENTO</button></div></form></div></div>
+<script>
+function abrirPagamento(id, atleta, evento, valor){
+ document.getElementById('paymentVenda').value=id;
+ document.getElementById('paymentValor').value=valor;
+ document.getElementById('paymentInfo').textContent='OS '+String(id).padStart(6,'0')+' • '+atleta+' • '+evento+' • R$ '+valor;
+ const m=document.getElementById('paymentModal');m.classList.add('show');m.setAttribute('aria-hidden','false');
+}
+function fecharPagamento(){const m=document.getElementById('paymentModal');m.classList.remove('show');m.setAttribute('aria-hidden','true')}
+document.getElementById('paymentModal').addEventListener('click',function(e){if(e.target===this)fecharPagamento()});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')fecharPagamento()});
+
+document.querySelectorAll('.entrega-form').forEach(function(form){form.addEventListener('submit',async function(e){
+ e.preventDefault();
+ if(!confirm('Confirmar que as fotos desta OS foram entregues?')) return;
+ const id=form.dataset.id;
+ try{
+   const resp=await fetch('/entregas/'+id+'/finalizar',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}});
+   const result=await resp.json();
+   if(!result.ok){alert('Erro ao finalizar a entrega: '+(result.erro||'Erro desconhecido.'));return;}
+   if(form.dataset.pago==='0'){
+     const pagar=confirm('Confirmar pagamento?\n\nO cliente desta OS ainda está com pagamento em aberto.');
+     if(pagar){
+       const row=form.closest('tr');
+       const atleta=row.querySelector('.athlete')?.textContent.trim()||'';
+       const evento=row.querySelector('td:nth-child(2) .sub')?.textContent.trim()||'';
+       const valor=row.querySelector('.money')?.textContent.replace('R$','').trim()||'';
+       abrirPagamento(id,atleta,evento,valor);
+       return;
+     }
+   }
+   window.location.href='{{ url_for("web_entregas") }}?evento='+encodeURIComponent(result.evento)+'&ok='+encodeURIComponent(result.mensagem);
+ }catch(err){alert('Erro ao finalizar a entrega: '+err)}
+});});
+</script>
+</body></html>

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nova Venda | SGFE WEB</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"><style>
+body{background:#05090a;color:#fff;font-family:Arial,sans-serif}.shell{max-width:1050px;margin:auto;padding:22px}.top{display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:18px}.title{font-size:28px;font-weight:900}.muted{color:#819596;font-size:12px}.card{border:1px solid #123f41;background:linear-gradient(145deg,#0a1112,#050809);border-radius:12px;padding:20px;margin-bottom:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}label{display:block;color:#7d9798;font-size:10px;font-weight:900;text-transform:uppercase;margin-bottom:6px}input,select,textarea{width:100%;box-sizing:border-box;background:#050b0c;color:#fff;border:1px solid #185154;border-radius:7px;padding:12px}.btn{display:inline-block;background:#0b5b5e;border:1px solid #12d8de;color:#fff;border-radius:7px;padding:12px 16px;font-weight:900;cursor:pointer;text-decoration:none}.primary{background:#116b55;border-color:#18d99a}.alert{padding:12px;border-radius:8px;margin-bottom:12px}.error{background:#250d0d;border:1px solid #d9534f;color:#ff8f8b}.price{font-size:24px;font-weight:900}.full{grid-column:1/-1}@media(max-width:700px){.grid{grid-template-columns:1fr}.full{grid-column:auto}}
+</style></head><body><div class="shell">
+<div class="top"><div><div class="title">💰 NOVA VENDA</div><div class="muted">Venda aberta a partir do balizamento confirmado</div></div><a class="btn" href="/agendamentos">← AGENDAMENTOS</a></div>
+{% if mensagem %}<div class="alert" style="background:#09251f;border:1px solid #16c784;color:#16c784">{{ mensagem }}</div>{% endif %}{% if erro_precos %}<div class="alert error">{{ erro_precos }}</div>{% endif %}
+<div class="card"><h2 style="margin-top:0">{{ info.cliente }}</h2><div class="muted">{{ info.evento }} · {{ info.data_evento }}</div></div>
+<form method="post" action="/vendas/nova" class="card">
+<input type="hidden" name="id_agendamento" value="{{ info.id }}">
+<div class="grid">
+<div><label>Quantidade de provas</label><select name="qtd_provas" id="qtd_provas" required onchange="calcular()"><option value="">SELECIONE...</option>{% for p in precos %}<option value="{{ p.qtd }}" data-valor="{{ p.valor }}" {% if info.qtd_preselecionada == p.qtd %}selected{% endif %}>{{ p.qtd }} prova{% if p.qtd != 1 %}s{% endif %} — R$ {{ '%.2f'|format(p.valor)|replace('.',',') }}</option>{% endfor %}</select></div>
+<div><label>Status da venda</label><select name="id_status" required>{% for s in status %}<option value="{{ s.id }}" {% if loop.first %}selected{% endif %}>{{ s.nome }}</option>{% endfor %}</select></div>
+<div><label>Desconto</label><input type="text" name="desconto" id="desconto" value="0" oninput="calcular()"></div>
+<div><label>Valor final</label><div id="valor_final" class="price">R$ 0,00</div></div>
+<div class="full"><label>Observações</label><textarea name="observacoes" rows="3" placeholder="Observações da venda..."></textarea></div>
+</div>
+<div style="margin-top:18px;display:flex;gap:10px;justify-content:flex-end"><button class="btn primary" type="submit">✓ SALVAR VENDA / OS</button></div>
+</form>
+<script>
+function moeda(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+function calcular(){const o=document.querySelector('#qtd_provas option:checked');const valor=Number(o?.dataset.valor||0);const d=Number((document.getElementById('desconto').value||'0').replace('.','').replace(',','.'))||0;document.getElementById('valor_final').innerText=moeda(Math.max(0,valor-d));}
+calcular();
+</script></div></body></html>

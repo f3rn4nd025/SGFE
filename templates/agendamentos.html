@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agendamentos | SGFE WEB</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+.module-top{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:18px}
+.module-top h1{font-size:32px;margin:5px 0}.module-top p{margin:0;color:#819596}
+.actions{display:flex;gap:8px}.action-btn{display:inline-block;text-decoration:none;background:#0b5b5e;color:#fff;border:1px solid #12d8de;border-radius:8px;padding:11px 15px;font-weight:900}
+.card{border:1px solid #123f41;background:linear-gradient(145deg,#0a1112,#050809);border-radius:12px;padding:18px;margin-bottom:16px}
+.filters{display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:10px;align-items:end}
+label{display:block;color:#7d9798;font-size:10px;font-weight:900;text-transform:uppercase;margin-bottom:5px}
+input,select,textarea{width:100%;box-sizing:border-box;background:#050b0c;color:#fff;border:1px solid #185154;border-radius:7px;padding:11px}
+button{cursor:pointer}.btn{background:#0b5b5e;border:1px solid #12d8de;color:#fff;border-radius:7px;padding:11px 16px;font-weight:900}
+.grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:12px}.full{grid-column:1/-1}
+.new-card{border-left:3px solid #12d8de}
+.table-wrap{overflow:auto;border:1px solid #123638;border-radius:9px}.table{width:100%;min-width:1250px}.table th,.table td{white-space:nowrap}.table td{font-size:12px}
+.row-action{display:inline-block;padding:6px 9px;border:1px solid #12d8de;border-radius:6px;color:#12d8de;text-decoration:none;font-weight:900;font-size:10px}.row-action:hover{background:#0b4143;color:#fff}
+.whatsapp{border-color:#20d96b;color:#20d96b}.whatsapp:hover{background:#0b4425;color:#fff}.wa-disabled{opacity:.35;cursor:not-allowed;border-color:#526b6c;color:#526b6c}
+.pill{padding:4px 8px;border:1px solid #27595b;border-radius:20px}.ok{background:#0b4b3d;border-color:#0c8f6f}
+.alert{padding:11px;border-radius:8px;margin-bottom:12px}.success{background:#09251f;border:1px solid #116e59}.error{background:#311414;border:1px solid #8d3434}
+.small{font-size:11px;color:#71898a}.search-combo input{margin-bottom:6px}.atleta-combo{position:relative}
+.atleta-combo #busca_atleta{width:100%;box-sizing:border-box}
+.lista-atletas{display:none;position:absolute;z-index:1000;left:0;right:0;top:72px;max-height:260px;overflow-y:auto;background:#050b0c;border:1px solid #12d8de;border-radius:8px;box-shadow:0 12px 28px rgba(0,0,0,.55)}
+.opcao-atleta{padding:12px 14px;color:#fff;cursor:pointer;border-bottom:1px solid #123537;font-size:14px}
+.opcao-atleta:hover{background:#0b4143;color:#fff}.opcao-atleta.ativo{background:#0b4143;color:#fff;outline:1px solid #12d8de}
+.new-athlete{
+display:none;
+position:fixed;
+z-index:5000;
+left:50%;
+top:24px;
+transform:translateX(-50%);
+width:min(1250px,94vw);
+max-height:calc(100vh - 48px);
+overflow-y:auto;
+box-sizing:border-box;
+margin:0;
+padding:24px;
+background:#071011;
+border:1px solid #12d8de;
+border-left:4px solid #12d8de;
+border-radius:12px;
+box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
+}
+.btn-equipe-add{background:#18a968;border-color:#35e6a0;color:#fff;min-width:44px;width:44px;flex:0 0 44px;font-size:20px;line-height:20px;padding:9px 8px;border-radius:8px;box-sizing:border-box}.btn-equipe-add:hover{background:#20bf79;border-color:#65f0bb}.btn-equipe-add:hover{background:#158267;border-color:#4ce8b3}
+.new-equipe{display:none;position:fixed;z-index:6000;left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,92vw);box-sizing:border-box;padding:22px;background:#071011;border:1px solid #21d49a;border-left:4px solid #21d49a;border-radius:12px;box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)}
+.new-equipe h4{margin:0 0 5px;color:#fff;font-size:21px}.new-equipe p{margin:0 0 18px;color:#819596;font-size:12px}.new-equipe-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.new-equipe-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.new-equipe input{font-size:14px}
+.new-athlete h4{font-size:22px;color:#fff;margin-bottom:8px}
+.new-athlete .small{max-width:900px}
+.new-athlete label{font-size:11px}
+.new-athlete input,.new-athlete select,.new-athlete textarea{font-size:14px}
+.new-athlete .grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.new-athlete .grid>div{min-width:0}
+.new-athlete .grid .full{grid-column:1/-1}
+.new-athlete .campo-equipe{grid-column:span 2;min-width:0}.campo-equipe-wrap{display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:7px;width:100%;min-width:0}.campo-equipe-wrap select{width:100%;min-width:0}.campo-equipe-wrap .btn-equipe-add{width:44px;min-width:44px;max-width:44px;padding:8px 0;display:flex;align-items:center;justify-content:center}
+.new-athlete input,.new-athlete select,.new-athlete textarea{min-height:40px}
+@media(max-width:900px){.new-athlete{width:94vw;padding:18px}.new-athlete .grid{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.new-athlete{top:12px;max-height:calc(100vh - 24px)}.new-athlete .grid{grid-template-columns:1fr}}
+
+.alert-success{margin:10px 0;padding:10px 14px;border:1px solid #16c784;border-radius:7px;color:#16c784;background:#071a14}.alert-error{margin:10px 0;padding:10px 14px;border:1px solid #d9534f;border-radius:7px;color:#ff8f8b;background:#250d0d}.btn-danger{border:1px solid #d9534f;color:#ff8f8b;background:transparent}.btn-danger:hover{background:#401313;color:#fff}
+/* AGENDAMENTOS: cards de módulo ocupam toda a largura; não usar o flex dos cards do painel */
+.main > .card{display:block;box-sizing:border-box;width:100%;min-width:0;}
+.main > .new-card{display:block;box-sizing:border-box;width:100%;}
+.main > .new-card > form.grid{display:grid;grid-template-columns:minmax(280px,1.4fr) minmax(280px,1fr) minmax(180px,1fr);width:100%;box-sizing:border-box;}
+</style>
+</head>
+<body>
+
+{% if request.args.get('ok') %}
+<div class="alert-success">{{ request.args.get('ok') }}</div>
+{% endif %}
+{% if request.args.get('erro') %}
+<div class="alert-error">{{ request.args.get('erro') }}</div>
+{% endif %}
+<div class="shell">
+<header class="topbar">
+<div class="brand"><div class="brand-mark"><img src="{{ url_for('static', filename='img/logo_fg.png') }}" alt="FG Fotos Esportivas"></div></div>
+<div class="sgfe-head"><div class="sgfe-title">SGFE WEB</div><div class="sgfe-subtitle">SISTEMA DE GESTÃO FG FOTOS ESPORTIVAS</div></div>
+<div class="event-box"><span>SGFE</span><strong>AGENDAMENTOS</strong><small>Evento no centro do fluxo</small></div>
+</header>
+<div class="layout">
+<aside class="sidebar">
+<a class="menu" href="/"><b>⌂</b> Painel</a>
+<a class="menu" href="/atletas"><b>♙</b> Atletas</a>
+<a class="menu active" href="/agendamentos"><b>◫</b> Agendamentos</a>
+<a class="menu" href="/vendas"><b>◎</b> Vendas / Pacotes</a>
+
+<a class="menu" href="/entregas"><b>✓</b> Entregas</a>
+<a class="menu" href="/pagamentos"><b>$</b> Pagamentos</a>
+<a class="menu" href="/historico"><b>▤</b> Histórico</a>
+<a class="menu" href="/configuracoes"><b>⚙</b> Configurações</a>
+</aside>
+
+<main class="main"><div class="page-actions"><a class="nav-btn" href="/">⌂ MENU PRINCIPAL</a><a class="nav-btn back-btn" href="#" onclick="history.back(); return false;">← VOLTAR</a></div>
+
+<div class="module-top">
+<div><a class="back" href="/">← Painel</a><h1>Agendamentos</h1><p>Agenda completa do SGFE — WhatsApp, balizamento e venda no mesmo fluxo.</p></div>
+<div class="actions"><button class="action-btn" onclick="document.getElementById('novo').scrollIntoView({behavior:'smooth'})">＋ NOVO AGENDAMENTO</button></div>
+</div>
+
+{% if mensagem %}<div class="alert success">{{ mensagem }}</div>{% endif %}
+{% if erro %}<div class="alert error">{{ erro }}</div>{% endif %}
+
+<div class="card new-card" id="novo">
+<h3 style="margin-top:0">NOVO AGENDAMENTO</h3>
+<p class="small">Primeiro escolhemos o evento e o atleta. Se o atleta ainda não existir, cadastramos aqui e seguimos o fluxo.</p>
+<form method="post" class="grid">
+<div><label>Evento</label><select name="id_evento" id="novo_evento" required><option value="">SELECIONE O EVENTO...</option>{% for e in eventos %}<option value="{{ e.id }}">{{ e.nome }} — {{ e.data }}{% if e.cidade %} — {{ e.cidade }}{% endif %}</option>{% endfor %}</select></div>
+<div class="atleta-combo">
+<label>Atleta</label>
+<input id="busca_atleta" type="text" autocomplete="off" role="combobox" aria-controls="lista_atletas" aria-expanded="false" placeholder="Digite o nome do atleta..." oninput="filtrarAtletas()" onfocus="abrirListaAtletas()" onkeydown="teclaAtleta(event)">
+<div id="lista_atletas" class="lista-atletas" role="listbox">
+{% for a in atletas %}
+<div class="opcao-atleta" role="option" tabindex="-1" data-id="{{ a.id }}" data-nome="{{ a.nome|e }}" onclick="selecionarAtleta(this.dataset.id, this.dataset.nome)">{{ a.nome }}{% if a.equipe %} — {{ a.equipe }}{% endif %}</div>
+{% endfor %}
+</div>
+<input type="hidden" name="id_cliente" id="novo_atleta" required>
+<button type="button" class="btn" style="margin-top:6px" onclick="toggleNovoAtleta()">+ CADASTRAR ATLETA</button>
+</div>
+
+<div style="display:flex;align-items:flex-end">
+<button class="btn" type="submit" style="width:100%;height:42px">SALVAR AGENDAMENTO</button>
+</div>
+
+<div class="full"><label>Observações</label><textarea name="observacoes" rows="2" placeholder="Observações do agendamento..."></textarea></div>
+</form>
+
+<div class="new-athlete" id="novoAtletaBox">
+<h4 style="margin-top:0">CADASTRO COMPLETO DO ATLETA</h4>
+<p class="small">É o mesmo conceito do Access: cadastre o atleta aqui, salve e ele volta automaticamente selecionado no agendamento.</p>
+<div class="grid">
+<div><label>Nome *</label><input id="cad_nome"></div>
+<div><label>Sexo</label><select id="cad_sexo"><option value="">SELECIONE...</option>{% for s in sexos_cadastro %}<option value="{{ s.id }}">{{ s.nome }}</option>{% endfor %}</select></div>
+<div><label>Ano nascimento</label><input id="cad_nascimento" type="number" min="1900" max="2100"></div>
+<div class="campo-equipe">
+<label>Equipe</label>
+<div class="campo-equipe-wrap">
+<select id="cad_equipe" onchange="preencherLocalEquipe()"><option value="">SELECIONE...</option>{% for e in equipes_cadastro %}<option value="{{ e.id }}" data-cidade="{{ e.cidade|e }}" data-estado="{{ e.estado|e }}">{{ e.nome }}</option>{% endfor %}</select>
+<button type="button" class="btn btn-equipe-add" title="Cadastrar nova equipe" onclick="abrirNovaEquipe()">＋</button>
+</div>
+</div>
+<div><label>Modalidade</label><select id="cad_modalidade"><option value="">SELECIONE...</option>{% for m in modalidades_cadastro %}<option value="{{ m.id }}">{{ m.nome }}</option>{% endfor %}</select></div>
+<div><label>Telefone / WhatsApp</label><input id="cad_telefone"></div>
+<div><label>Contato</label><input id="cad_contato" placeholder="Ex.: Neire"></div>
+<div><label>Cidade</label><input id="cad_cidade"></div>
+<div><label>Estado</label><input id="cad_estado"></div>
+<div><label>E-mail</label><input id="cad_email" type="email"></div>
+<div><label>Instagram</label><input id="cad_instagram"></div>
+<div class="full"><label>Observações</label><textarea id="cad_observacoes" rows="2"></textarea></div>
+</div>
+<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn" type="button" onclick="cadastrarAtleta()">SALVAR ATLETA E VOLTAR</button>
+<button class="btn btn-danger" type="button" onclick="toggleNovoAtleta()">CANCELAR</button>
+</div>
+<div id="cad_msg" class="small" style="margin-top:8px"></div>
+</div>
+
+
+<div class="new-equipe" id="novaEquipeBox">
+  <div class="new-equipe-head">
+    <div><h4>CADASTRAR EQUIPE</h4><p>Cadastre somente o nome agora. Depois você pode editar cidade e estado no cadastro da equipe.</p></div>
+    <button type="button" class="btn btn-danger" onclick="fecharNovaEquipe()">✕</button>
+  </div>
+  <label>Nome da equipe *</label>
+  <input id="nova_equipe_nome" autocomplete="off" placeholder="Ex.: Praia Clube">
+  <div class="new-equipe-actions">
+    <button type="button" class="btn btn-equipe-add" onclick="salvarNovaEquipe()">SALVAR E VOLTAR AO ATLETA</button>
+    <button type="button" class="btn btn-danger" onclick="fecharNovaEquipe()">CANCELAR</button>
+  </div>
+  <div id="nova_equipe_msg" class="small"></div>
+</div>
+
+<div class="card" style="border-left:3px solid #12d8de">
+<h3 style="margin-top:0">📎 BALIZAMENTO DO EVENTO</h3>
+<p class="small">Anexe aqui o PDF do balizamento. Ele fica vinculado ao evento e será usado automaticamente quando você clicar em <b>BALIZAMENTO</b> no atleta.</p>
+<form id="formBalizamento" method="post" enctype="multipart/form-data" onsubmit="return enviarBalizamento(event)">
+<div style="display:grid;grid-template-columns:1.2fr 1fr auto auto;gap:10px;align-items:end">
+<div><label>Evento</label><select id="balizamento_evento" required onchange="atualizarBotaoImpressaoBalizamento()"><option value="">SELECIONE O EVENTO...</option>{% for e in eventos %}<option value="{{ e.id }}">{{ e.nome }} — {{ e.data }}{% if e.cidade %} — {{ e.cidade }}{% endif %}</option>{% endfor %}</select></div>
+<div><label>Arquivo PDF</label><input id="balizamento_arquivo" name="balizamento" type="file" accept="application/pdf" required></div>
+<div><button class="btn" type="submit">📎 ANEXAR BALIZAMENTO</button></div>
+<div><button id="btnImprimirBalizamentoEvento" type="button" class="btn" style="border-color:#f5d547;color:#f5d547;white-space:nowrap" onclick="imprimirBalizamentoEvento()" disabled>🖨 IMPRIMIR BALIZAMENTO</button></div>
+</div>
+<div id="balizamento_upload_msg" class="small" style="margin-top:8px"></div>
+</form>
+</div>
+
+<div class="card">
+<h3 style="margin-top:0">FILTROS DO AGENDAMENTO</h3>
+<form class="filters" method="get">
+<div><label>Pesquisar</label><input name="q" value="{{ busca }}" placeholder="Atleta, telefone, contato ou evento..."></div>
+<div><label>Evento</label><select name="evento"><option value="">TODOS OS EVENTOS</option>{% for e in eventos %}<option value="{{ e.id }}" {% if filtro_evento|string == e.id|string %}selected{% endif %}>{{ e.nome }} — {{ e.data }}{% if e.cidade %} — {{ e.cidade }}{% endif %}</option>{% endfor %}</select></div>
+<div><label>Status</label><select name="status"><option value="">TODOS OS STATUS</option>{% for s in status %}<option value="{{ s.id }}" {% if filtro_status|string == s.id|string %}selected{% endif %}>{{ s.nome }}</option>{% endfor %}</select></div>
+<button class="btn">FILTRAR</button>
+</form>
+</div>
+
+<div class="card">
+<div class="small" style="margin-bottom:10px">{{ data|length }} agendamento(s) encontrado(s)</div>
+<div class="table-wrap">
+<table class="table">
+<thead><tr>
+<th>AGENDAMENTO</th><th>DATA</th><th>ATLETA</th><th>EVENTO</th><th>DATA EVENTO</th><th>CIDADE</th><th>STATUS</th><th>OBSERVAÇÕES</th><th>AVISO</th><th>AÇÃO</th>
+</tr></thead>
+<tbody>
+{% for r in data %}
+<tr>
+<td>#{{ r.IDAgendamento }}</td><td>{{ r.DataAgendamento }}</td><td>{{ r.Atleta }}</td><td>{{ r.Evento }}</td><td>{{ r.DataEvento }}</td><td>{{ r.Cidade }}</td>
+<td><span class="pill {% if 'CANCEL' not in r.Status|upper %}ok{% endif %}">{{ r.Status }}</span></td><td>{{ r.Observacoes }}</td>
+<td>
+{% if r.Telefone %}
+<a class="row-action whatsapp" target="_blank" rel="noopener"
+href="https://wa.me/{{ r.Telefone|replace('(','')|replace(')','')|replace('-','')|replace(' ','')|replace('+','') }}?text={{ ('Olá, ' ~ (r.Contato or r.Atleta) ~ '!\n\nTudo bem?\n\nO balizamento do evento ' ~ r.Evento ~ ' já está disponível!\n\nAgora precisamos definir a quantidade e quais provas ' ~ (('a atleta ' if (r.Sexo or '')|upper in ['F','FEMININO','FEMININA'] else 'o atleta ') ~ r.Atleta) ~ ' irá disputar para finalizarmos a contratação da cobertura fotográfica.\n\nAssim que você me passar essas informações, verifico a disponibilidade, calculo o valor do pacote e já deixamos tudo organizado para o evento.\n\nQualquer dúvida, estou à disposição.\n\nFernando - Fotografia Esportiva')|urlencode }}">WHATSAPP</a>
+{% else %}
+<span class="row-action wa-disabled">SEM TELEFONE</span>
+{% endif %}
+</td>
+<td>{% if r.IDAgendamento %}
+{% if r.BalizamentoArquivo %}<a class="row-action" style="border-color:#f5d547;color:#f5d547" href="/agendamentos/{{ r.IDAgendamento }}/balizamento">🏊 BALIZAMENTO</a>{% else %}<a class="row-action" style="border-color:#7d9798;color:#7d9798" href="/eventos/{{ r.IDEvento }}/balizamento" title="Este evento ainda não possui balizamento anexado">📎 ANEXAR BALIZAMENTO</a>{% endif %}
+<a class="row-action" style="border-color:#12d8de;color:#12d8de" href="/agendamentos/{{ r.IDAgendamento }}/venda">💰 GERAR VENDA</a>
+<form method="post" action="/agendamentos/{{ r.IDAgendamento }}/excluir" style="display:inline" onsubmit="return confirm('Excluir este agendamento? Esta ação não poderá ser desfeita.');">
+<button type="submit" class="row-action btn-danger">EXCLUIR</button>
+</form>{% endif %}</td>
+</tr>
+{% else %}<tr><td colspan="10" class="empty">Nenhum agendamento encontrado com esses filtros.</td></tr>{% endfor %}
+</tbody></table>
+</div></div>
+</main></div></div>
+
+<script>
+let atletaIndex=-1;
+
+function itensAtletasVisiveis(){
+ const lista=document.getElementById('lista_atletas');
+ return [...lista.querySelectorAll('.opcao-atleta')].filter(x=>x.style.display!=='none');
+}
+function abrirListaAtletas(){
+ const lista=document.getElementById('lista_atletas');
+ const input=document.getElementById('busca_atleta');
+ lista.style.display='block';
+ input.setAttribute('aria-expanded','true');
+ filtrarAtletas();
+}
+function fecharListaAtletas(){
+ const lista=document.getElementById('lista_atletas');
+ const input=document.getElementById('busca_atleta');
+ if(lista) lista.style.display='none';
+ if(input) input.setAttribute('aria-expanded','false');
+ atletaIndex=-1;
+}
+function filtrarAtletas(){
+ const termo=(document.getElementById('busca_atleta').value||'').trim().toLocaleLowerCase('pt-BR');
+ const lista=document.getElementById('lista_atletas');
+ const itens=[...lista.querySelectorAll('.opcao-atleta')];
+ itens.forEach(item=>{
+   const texto=(item.textContent||'').toLocaleLowerCase('pt-BR');
+   item.style.display=(!termo || texto.includes(termo))?'block':'none';
+   item.classList.remove('ativo');
+ });
+ atletaIndex=-1;
+ lista.style.display='block';
+}
+function destacarAtleta(index){
+ const vis=itensAtletasVisiveis();
+ if(!vis.length) return;
+ atletaIndex=(index+vis.length)%vis.length;
+ vis.forEach(x=>x.classList.remove('ativo'));
+ const item=vis[atletaIndex];
+ item.classList.add('ativo');
+ item.scrollIntoView({block:'nearest'});
+}
+function teclaAtleta(e){
+ const vis=itensAtletasVisiveis();
+ if(e.key==='ArrowDown'){
+   e.preventDefault();
+   if(document.getElementById('lista_atletas').style.display!=='block') abrirListaAtletas();
+   destacarAtleta(atletaIndex+1);
+ }else if(e.key==='ArrowUp'){
+   e.preventDefault();
+   if(document.getElementById('lista_atletas').style.display!=='block') abrirListaAtletas();
+   destacarAtleta(atletaIndex-1);
+ }else if(e.key==='Enter'){
+   if(atletaIndex>=0 && vis[atletaIndex]){
+     e.preventDefault();
+     const item=vis[atletaIndex];
+     selecionarAtleta(item.dataset.id,item.dataset.nome);
+   }
+ }else if(e.key==='Escape'){
+   e.preventDefault();
+   fecharListaAtletas();
+ }
+}
+function selecionarAtleta(id,nome){
+ document.getElementById('novo_atleta').value=String(id);
+ document.getElementById('busca_atleta').value=nome;
+ fecharListaAtletas();
+ document.getElementById('novo_atleta').dispatchEvent(new Event('change'));
+}
+document.addEventListener('click', function(e){
+ const combo=document.querySelector('.atleta-combo');
+ if(combo && !combo.contains(e.target)) fecharListaAtletas();
+});
+
+function toggleNovoAtleta(){
+ const x=document.getElementById('novoAtletaBox');
+ x.style.display=x.style.display==='block'?'none':'block';
+}
+function abrirNovaEquipe(){
+ const box=document.getElementById('novaEquipeBox');
+ const input=document.getElementById('nova_equipe_nome');
+ const msg=document.getElementById('nova_equipe_msg');
+ msg.textContent=''; input.value=''; box.style.display='block'; setTimeout(()=>input.focus(),80);
+}
+function fecharNovaEquipe(){ document.getElementById('novaEquipeBox').style.display='none'; }
+async function salvarNovaEquipe(){
+ const nome=document.getElementById('nova_equipe_nome').value.trim();
+ const msg=document.getElementById('nova_equipe_msg');
+ if(!nome){msg.textContent='Informe o nome da equipe.';return;}
+ msg.textContent='Salvando equipe...';
+ const fd=new FormData(); fd.append('nome',nome);
+ try{
+   const r=await fetch('/agendamentos/nova-equipe',{method:'POST',body:fd});
+   const data=await r.json();
+   if(!data.ok){msg.textContent=data.erro||'Não foi possível cadastrar a equipe.';return;}
+   const sel=document.getElementById('cad_equipe');
+   let opt=[...sel.options].find(o=>String(o.value)===String(data.id));
+   if(!opt){
+     opt=document.createElement('option'); opt.value=data.id; sel.appendChild(opt);
+   }
+   opt.textContent=data.nome;
+   opt.dataset.cidade=data.cidade||'';
+   opt.dataset.estado=data.estado||'';
+   sel.value=String(data.id);
+   preencherLocalEquipe();
+   fecharNovaEquipe();
+   document.getElementById('cad_msg').textContent=data.existente ? 'Equipe já existia. Ela foi selecionada no cadastro do atleta.' : 'Equipe cadastrada e selecionada. Continue o cadastro do atleta.';
+   document.getElementById('cad_nome').focus();
+ }catch(err){msg.textContent='Erro ao cadastrar equipe: '+err;}
+}
+
+function preencherLocalEquipe(){
+ const sel=document.getElementById('cad_equipe');
+ const opt=sel.options[sel.selectedIndex];
+ const cidade=(opt && opt.dataset.cidade) ? opt.dataset.cidade : '';
+ const estado=(opt && opt.dataset.estado) ? opt.dataset.estado : '';
+ document.getElementById('cad_cidade').value=cidade;
+ document.getElementById('cad_estado').value=estado;
+}
+
+async function cadastrarAtleta(){
+ const msg=document.getElementById('cad_msg');
+ const nome=document.getElementById('cad_nome').value.trim();
+ if(!nome){msg.textContent='Informe o nome do atleta.';return;}
+
+ const fd=new FormData();
+ const campos={
+   nome:'cad_nome', sexo_id:'cad_sexo', ano_nascimento:'cad_nascimento',
+   equipe_id:'cad_equipe', modalidade_id:'cad_modalidade',
+   telefone:'cad_telefone', contato:'cad_contato', cidade:'cad_cidade',
+   estado:'cad_estado', email:'cad_email', instagram:'cad_instagram',
+   observacoes:'cad_observacoes'
+ };
+ Object.entries(campos).forEach(([campo,id])=>{
+   fd.append(campo, document.getElementById(id).value.trim());
+ });
+
+ msg.textContent='Salvando atleta...';
+
+ try{
+   const r=await fetch('/agendamentos/novo-atleta',{method:'POST',body:fd});
+   const data=await r.json();
+
+   if(!data.ok){
+     msg.textContent=data.erro||'Não foi possível cadastrar.';
+     if(data.id_cliente){
+       selecionarAtleta(data.id_cliente,data.nome||nome);
+       msg.textContent='Atleta já cadastrado. Ele foi selecionado no agendamento.';
+     }
+     return;
+   }
+
+   // Exatamente como no Access: salva o cliente e volta para o agendamento
+   // com o atleta já preenchido/selecionado.
+   selecionarAtleta(data.id_cliente,data.nome);
+   document.getElementById('novoAtletaBox').style.display='none';
+   msg.textContent='Atleta cadastrado e selecionado. Agora salve o agendamento.';
+   document.getElementById('novo_evento').focus();
+ }catch(err){
+   msg.textContent='Erro ao cadastrar atleta: '+err;
+ }
+}
+function atualizarBotaoImpressaoBalizamento(){
+  const sel=document.getElementById('balizamento_evento');
+  const btn=document.getElementById('btnImprimirBalizamentoEvento');
+  if(!sel || !btn) return;
+  btn.disabled=!sel.value;
+  btn.style.opacity=sel.value?'1':'0.45';
+  btn.title=sel.value?'Imprimir o balizamento completo deste evento, com as marcações':'Selecione um evento para imprimir o balizamento';
+}
+
+function imprimirBalizamentoEvento(){
+  const evento=document.getElementById('balizamento_evento').value;
+  if(!evento){
+    document.getElementById('balizamento_upload_msg').textContent='Selecione o evento para imprimir o balizamento.';
+    return;
+  }
+  window.open('/eventos/'+evento+'/balizamento/imprimir','_blank');
+}
+
+async function enviarBalizamento(e){
+  e.preventDefault();
+  const evento=document.getElementById('balizamento_evento').value;
+  const arquivo=document.getElementById('balizamento_arquivo').files[0];
+  const msg=document.getElementById('balizamento_upload_msg');
+  if(!evento){msg.textContent='Selecione o evento.';return false;}
+  if(!arquivo){msg.textContent='Selecione o PDF do balizamento.';return false;}
+  if(!arquivo.name.toLowerCase().endsWith('.pdf')){msg.textContent='O balizamento deve ser um PDF.';return false;}
+  msg.textContent='Importando balizamento e lendo provas, séries e atletas...';
+  const fd=new FormData(); fd.append('balizamento',arquivo);
+  try{
+    const r=await fetch('/eventos/'+evento+'/balizamento',{method:'POST',body:fd});
+    if(r.redirected){window.location.href=r.url;return false;}
+    const txt=await r.text();
+    document.open();document.write(txt);document.close();
+  }catch(err){msg.textContent='Erro ao anexar balizamento: '+err;}
+  return false;
+}
+
+</script>
+</body></html>

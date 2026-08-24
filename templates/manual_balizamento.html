@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Definir provas | SGFE WEB</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+body{background:#05090a;color:#fff;font-family:Arial,sans-serif}.shell{max-width:1200px;margin:auto;padding:18px}.top{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:18px}.title{font-size:28px;font-weight:900}.muted{color:#819596;font-size:12px}.card{border:1px solid #123f41;background:linear-gradient(145deg,#0a1112,#050809);border-radius:12px;padding:20px;margin-bottom:16px}.btn{display:inline-block;background:#0b5b5e;border:1px solid #12d8de;color:#fff;border-radius:7px;padding:10px 14px;font-weight:900;text-decoration:none;cursor:pointer}.btn-confirm{background:#116b55;border-color:#18d99a}.btn-danger{background:#3a1515;border-color:#d9534f}.notice{display:none;padding:12px;border-radius:9px;margin-bottom:12px}.notice.show{display:block}.notice.ok{background:#09251f;border:1px solid #16c784}.notice.err{background:#250d0d;border:1px solid #d9534f}.manual-title{font-weight:900;font-size:20px;margin-bottom:6px}.manual-sub{color:#819596;font-size:12px;margin-bottom:18px;line-height:1.4}.manual-grid{display:grid;grid-template-columns:100px 100px 100px minmax(220px,1fr) auto;gap:10px;align-items:end}.field{display:flex;flex-direction:column;gap:5px}.field label{font-size:9px;color:#7d9798;text-transform:uppercase;font-weight:900}.field input{width:100%;box-sizing:border-box;background:#05090a;color:#fff;border:1px solid #15575a;border-radius:6px;padding:10px;font-size:12px}.list-title{font-size:16px;font-weight:900;margin:22px 0 10px}.list{display:flex;flex-direction:column;gap:8px}.item{display:grid;grid-template-columns:70px 70px 70px 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid #123f41;border-radius:8px;background:#071213}.item strong{font-size:12px}.item span{font-size:11px;color:#b5c6c7}.bottom{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;padding-top:15px;border-top:1px solid #123638}.empty{color:#819596;font-size:12px;padding:14px;border:1px dashed #15575a;border-radius:8px}@media(max-width:800px){.manual-grid{grid-template-columns:1fr 1fr}.manual-grid .field:nth-child(4),.manual-grid button{grid-column:1/-1}.item{grid-template-columns:1fr 1fr}.item button{grid-column:1/-1}.bottom{flex-direction:column}.bottom .btn{width:100%}}
+</style>
+</head>
+<body><div class="shell">
+<div class="top"><div><div class="title">🏊 DEFINIR PROVAS</div><div class="muted"><b>{{ info.atleta }}</b> · {{ info.evento }} · {{ info.data_evento }}</div></div><a class="btn" href="/agendamentos">← VOLTAR</a></div>
+<div class="card">
+<div id="notice" class="notice"></div>
+<div class="manual-title">ATLETA NÃO LOCALIZADO NO BALIZAMENTO</div>
+<div class="manual-sub">O sistema não conseguiu identificar este atleta no balizamento oficial. Informe abaixo as provas que você deseja fotografar. Você pode adicionar quantas provas forem necessárias e, somente depois, confirmar para abrir a tela de marcação.</div>
+<div class="manual-grid">
+<div class="field"><label>Prova</label><input id="prova" type="number" min="1" placeholder="Ex.: 32"></div>
+<div class="field"><label>Série</label><input id="serie" type="number" min="1" placeholder="Ex.: 7"></div>
+<div class="field"><label>Raia</label><input id="raia" type="number" min="0" placeholder="Opcional"></div>
+<div class="field"><label>Nome da prova</label><input id="nome" type="text" placeholder="Ex.: 50M LIVRE MASC. PETIZ"></div>
+<button class="btn" type="button" onclick="adicionarProva()">＋ ADICIONAR PROVA</button>
+</div>
+<div class="list-title">PROVAS DEFINIDAS</div>
+<div id="lista" class="list"><div class="empty">Nenhuma prova adicionada ainda.</div></div>
+<div class="bottom"><a class="btn" href="/agendamentos">CANCELAR</a><button id="confirmar" class="btn btn-confirm" type="button" onclick="confirmarProvas()" disabled>✓ CONFIRMAR PROVAS E IR PARA MARCAÇÃO</button></div>
+</div></div>
+<script>
+const AG={{ info.id }}; const CLIENTE={{ info.cliente_id }}; const EVENTO={{ info.evento_id }};
+let provas=[];
+function aviso(txt,tipo){const n=document.getElementById('notice');n.className='notice show '+tipo;n.innerHTML=txt;window.scrollTo({top:0,behavior:'smooth'});}
+function limpar(){document.getElementById('prova').value='';document.getElementById('serie').value='';document.getElementById('raia').value='';document.getElementById('nome').value='';document.getElementById('prova').focus();}
+function adicionarProva(){
+ const prova=Number(document.getElementById('prova').value||0), serie=Number(document.getElementById('serie').value||0), raia=Number(document.getElementById('raia').value||0), nome=(document.getElementById('nome').value||'').trim()||'PROVA MANUAL';
+ if(!prova||!serie){aviso('⚠️ Informe o número da prova e da série.','err');return;}
+ if(provas.some(x=>x.prova===prova && x.serie===serie)){aviso('⚠️ Essa prova + série já foi adicionada.','err');return;}
+ provas.push({prova,serie,raia,nome}); render(); limpar(); aviso('✅ Prova adicionada à lista.','ok');
+}
+function remover(i){provas.splice(i,1);render();}
+function render(){
+ const el=document.getElementById('lista'); const btn=document.getElementById('confirmar'); btn.disabled=!provas.length;
+ if(!provas.length){el.innerHTML='<div class="empty">Nenhuma prova adicionada ainda.</div>';return;}
+ el.innerHTML=provas.map((x,i)=>`<div class="item"><strong>${x.prova}ª</strong><span>Série: <b>${x.serie}ª</b></span><span>Raia: <b>${x.raia||'-'}</b></span><span>${esc(x.nome)}</span><button class="btn btn-danger" type="button" onclick="remover(${i})">✕ REMOVER</button></div>`).join('');
+}
+function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+async function confirmarProvas(){
+ if(!provas.length){aviso('⚠️ Adicione pelo menos uma prova.','err');return;}
+ const b=document.getElementById('confirmar'); b.disabled=true; b.innerText='SALVANDO...';
+ try{
+  const r=await fetch('/api/balizamento/manual-lote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({evento:EVENTO,cliente:CLIENTE,agendamento:AG,provas})});
+  const d=await r.json(); if(!r.ok||!d.ok){b.disabled=false;b.innerText='✓ CONFIRMAR PROVAS E IR PARA MARCAÇÃO';aviso('❌ '+(d.erro||'Não foi possível salvar as provas.'),'err');return;}
+  window.location.href='/agendamentos/'+AG+'/balizamento';
+ }catch(e){b.disabled=false;b.innerText='✓ CONFIRMAR PROVAS E IR PARA MARCAÇÃO';aviso('❌ Erro ao salvar as provas: '+e,'err');}
+}
+document.getElementById('nome').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();adicionarProva();}});
+</script></body></html>

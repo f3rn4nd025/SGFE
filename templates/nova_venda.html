@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nova Venda / OS | SGFE WEB</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+.form-card{max-width:1050px;border:1px solid #123f41;background:linear-gradient(145deg,#0a1112,#050809);border-radius:12px;padding:24px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.field label{display:block;color:#8ba3a4;font-size:11px;text-transform:uppercase;font-weight:800;margin-bottom:6px}.field select,.field input,.field textarea{width:100%;box-sizing:border-box;background:#050b0c;color:#fff;border:1px solid #185154;border-radius:7px;padding:12px}.field textarea{min-height:90px}.full{grid-column:1/-1}.price{font-size:18px;font-weight:900;color:#12d8de}.result{margin-top:15px;padding:12px;border-radius:8px;background:#09251f;border:1px solid #116e59;color:#8ff1d5}.error{margin-top:15px;padding:12px;border-radius:8px;background:#311414;border:1px solid #8d3434}.actions{margin-top:18px;display:flex;gap:10px}.btn{background:#0b5b5e;border:1px solid #12d8de;color:#fff;border-radius:8px;padding:12px 18px;font-weight:900}.back{color:#12d8de;text-decoration:none;font-weight:800}
+</style></head>
+<body><div class="shell">
+<header class="topbar"><div class="brand"><div class="brand-mark"><img src="{{ url_for('static', filename='img/logo_fg.png') }}" alt="FG Fotos Esportivas"></div></div><div class="sgfe-head"><div class="sgfe-title">SGFE WEB</div><div class="sgfe-subtitle">SISTEMA DE GESTÃO FG FOTOS ESPORTIVAS</div></div><div class="event-box"><span>VENDA</span><strong>NOVA OS</strong><small>Regra de preço do SGFE</small></div></header>
+<div class="layout"><aside class="sidebar">
+<a class="menu" href="/"><b>⌂</b> Painel</a><a class="menu" href="/atletas"><b>♙</b> Atletas</a><a class="menu" href="/agendamentos"><b>◫</b> Agendamentos</a>
+<a class="menu active" href="/vendas"><b>◎</b> Vendas / Pacotes</a><a class="menu" href="/entregas"><b>✓</b> Entregas</a>
+<a class="menu" href="/pagamentos"><b>$</b> Pagamentos</a><a class="menu" href="/historico"><b>▤</b> Histórico</a><a class="menu" href="/configuracoes"><b>⚙</b> Configurações</a>
+</aside><main class="main"><div class="page-actions"><a class="nav-btn" href="/">⌂ MENU PRINCIPAL</a><a class="nav-btn back-btn" href="#" onclick="history.back(); return false;">← VOLTAR</a></div>
+
+<a class="back" href="/vendas">← Voltar para Vendas / Pacotes</a><h1>Nova Venda / OS</h1><p>O preço é buscado automaticamente de <b>tblPrecoEvento</b>.</p>
+<div class="form-card">
+{% if mensagem %}<div class="result">{{ mensagem }}</div>{% endif %}{% if erro %}<div class="error">{{ erro }}</div>{% endif %}
+<form method="post"><div class="grid">
+<div class="field"><label>Atleta / Cliente</label><select name="id_cliente" required><option value="">Selecione...</option>{% for c in clientes %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}</select></div>
+<div class="field"><label>Evento</label><select id="evento" name="id_evento" required><option value="">Selecione...</option>{% for e in eventos %}<option value="{{ e.id }}">{{ e.nome }} — {{ e.data }} — {{ e.cidade }}</option>{% endfor %}</select></div>
+<div class="field"><label>Quantidade de provas</label><select id="qtd" name="qtd_provas" required><option value="">Escolha o evento primeiro...</option></select></div>
+<div class="field"><label>Desconto</label><input id="desconto" name="desconto" type="number" step="0.01" min="0" value="0"></div>
+<div class="field"><label>Status da venda</label><select name="id_status" required><option value="">Selecione...</option>{% for s in status %}<option value="{{ s.id }}">{{ s.nome }}</option>{% endfor %}</select></div>
+<div class="field"><label>ID do agendamento (opcional)</label><input name="id_agendamento" type="number" min="1"></div>
+<div class="field full"><label>Observações</label><textarea name="observacoes"></textarea></div>
+<div class="field"><label>Valor do pacote</label><div class="price" id="valor_pacote">R$ 0,00</div></div>
+<div class="field"><label>Valor final</label><div class="price" id="valor_final">R$ 0,00</div></div>
+</div><div class="actions"><button class="btn" type="submit">SALVAR VENDA</button></div></form>
+</div></main></div></div>
+<script>
+const evento=document.getElementById('evento'), qtd=document.getElementById('qtd'), desconto=document.getElementById('desconto');
+const pacote=document.getElementById('valor_pacote'), finalEl=document.getElementById('valor_final');
+let precos=[];
+function br(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+function calc(){let q=Number(qtd.value||0);let p=(precos.find(x=>Number(x.qtd)===q)||{}).valor||0;let d=Number(desconto.value||0);pacote.textContent=br(p);finalEl.textContent=br(Math.max(0,p-d));}
+evento.addEventListener('change', async ()=>{
+ qtd.innerHTML='<option>Carregando...</option>'; precos=[];
+ if(!evento.value){qtd.innerHTML='<option>Escolha o evento primeiro...</option>';calc();return;}
+ const r=await fetch('/api/precos/'+evento.value); precos=await r.json();
+ qtd.innerHTML='<option value="">Selecione...</option>';
+ precos.forEach(x=>{const o=document.createElement('option');o.value=x.qtd;o.textContent=x.qtd+' prova(s) — '+br(x.valor);qtd.appendChild(o);});
+ calc();
+});
+qtd.addEventListener('change',calc); desconto.addEventListener('input',calc);
+</script></body></html>

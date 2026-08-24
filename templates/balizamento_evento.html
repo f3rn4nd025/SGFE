@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Balizamento | SGFE WEB</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+body{background:#05090a;color:#fff;font-family:Arial,sans-serif}.shell{max-width:1400px;margin:auto;padding:18px}.top{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:18px}.title{font-size:28px;font-weight:900}.muted{color:#819596;font-size:12px}.card{border:1px solid #123f41;background:linear-gradient(145deg,#0a1112,#050809);border-radius:12px;padding:20px;margin-bottom:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}label{display:block;color:#7d9798;font-size:10px;font-weight:900;text-transform:uppercase;margin-bottom:6px}input{width:100%;box-sizing:border-box;background:#050b0c;color:#fff;border:1px solid #185154;border-radius:7px;padding:12px}button,.btn{display:inline-block;background:#0b5b5e;border:1px solid #12d8de;color:#fff;border-radius:7px;padding:12px 16px;font-weight:900;cursor:pointer;text-decoration:none}.danger{border-color:#d9534f;color:#ff8f8b;background:transparent}.ok{padding:12px;border:1px solid #16c784;color:#16c784;background:#071a14;border-radius:8px}.err{padding:12px;border:1px solid #d9534f;color:#ff8f8b;background:#250d0d;border-radius:8px}.file{font-size:13px}.status{font-size:22px;font-weight:900}.small{font-size:11px;color:#71898a}
+</style>
+</head>
+<body><div class="shell">
+<div class="top"><div><div class="title">📎 BALIZAMENTO DO EVENTO</div><div class="muted">{{ evento.nome }} · {{ evento.data }} · {{ evento.cidade }}</div></div><a class="btn" href="/agendamentos">← VOLTAR AOS AGENDAMENTOS</a></div>
+{% if mensagem %}<div class="ok">{{ mensagem }}</div>{% endif %}
+{% if erro %}<div class="err">{{ erro }}</div>{% endif %}
+<div class="card">
+<h2 style="margin-top:0">{{ evento.nome }}</h2>
+<p class="muted">O PDF fica vinculado somente a este evento. Quando você anexar um novo PDF, o balizamento anterior deste evento é substituído.</p>
+<form method="post" enctype="multipart/form-data">
+<div class="grid">
+<div><label>Arquivo atual</label><div class="file">{% if evento.arquivo %}📄 {{ evento.arquivo }}{% else %}Nenhum balizamento anexado{% endif %}</div><div class="small" style="margin-top:7px">{% if evento.data_arquivo %}Importado em {{ evento.data_arquivo }}{% endif %}</div></div>
+<div><label>Novo PDF do balizamento</label><input type="file" name="balizamento" accept="application/pdf" required></div>
+</div>
+<div style="margin-top:16px"><button type="submit">📎 ANEXAR E IMPORTAR BALIZAMENTO</button></div>
+</form>
+</div>
+<div class="card">
+<div class="status">{% if evento.arquivo %}🟢 BALIZAMENTO PRONTO{% else %}⚪ AGUARDANDO BALIZAMENTO{% endif %}</div>
+<p class="muted" style="margin-bottom:0">{{ evento.quantidade }} ocorrências de atleta/prova reconhecidas pelo sistema.</p>
+</div>
+</div></body></html>

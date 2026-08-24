@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ titulo }} | SGFE WEB</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+.page{max-width:1200px}.back{color:#12d8de;text-decoration:none;font-weight:800}
+.card{border:1px solid #123f41;background:linear-gradient(145deg,#0a1112,#050809);border-radius:12px;padding:24px;margin-top:20px}
+.grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:16px}.field{display:flex;flex-direction:column;gap:6px}.field label{font-size:10px;color:#789394;font-weight:900;text-transform:uppercase}
+.field input,.field select{background:#050b0c;color:#fff;border:1px solid #16494b;border-radius:7px;padding:12px;font:inherit}
+.actions{margin-top:22px;display:flex;gap:10px}.btn{border:1px solid #12d8de;background:#0b5b5e;color:#fff;border-radius:8px;padding:12px 18px;font-weight:900;cursor:pointer}.cancel{background:#11191a;border-color:#385354;text-decoration:none}
+.alert{margin-top:15px;padding:12px;border:1px solid #a84444;background:#321315;color:#ff9a9a;border-radius:8px;font-weight:800}
+</style>
+</head>
+<body>
+<div class="shell">
+<header class="topbar">
+<div class="brand"><div class="brand-mark"><img src="{{ url_for('static', filename='img/logo_fg.png') }}"></div></div>
+<div class="sgfe-head"><div class="sgfe-title">SGFE WEB</div><div class="sgfe-subtitle">SISTEMA DE GESTÃO FG FOTOS ESPORTIVAS</div></div>
+</header>
+<div class="layout">
+<aside class="sidebar">
+<a class="menu" href="/">⌂ &nbsp; Painel</a><a class="menu" href="/atletas">♙ &nbsp; Atletas</a>
+<a class="menu" href="/agendamentos">◫ &nbsp; Agendamentos</a><a class="menu" href="/vendas">◎ &nbsp; Vendas / Pacotes</a>
+<a class="menu" href="/entregas">✓ &nbsp; Entregas</a>
+<a class="menu" href="/pagamentos">$ &nbsp; Pagamentos</a><a class="menu" href="/historico">▤ &nbsp; Histórico</a>
+</aside>
+<main class="main page"><div class="page-actions"><a class="nav-btn" href="/">⌂ MENU PRINCIPAL</a><a class="nav-btn back-btn" href="#" onclick="history.back(); return false;">← VOLTAR</a></div>
+
+<a class="back" href="/eventos">← Voltar para Eventos</a>
+<h1>{{ titulo }}</h1><p>Cadastro de eventos do SGFE.</p>
+{% if erro %}<div class="alert">{{ erro }}</div>{% endif %}
+<form method="post" class="card">
+<div class="grid">
+<div class="field"><label>Nome do evento *</label><input name="nome_evento" value="{{ form.get('nome_evento','') }}" required></div>
+<div class="field"><label>Data do evento *</label><input type="date" name="data_evento" value="{{ form.get('data_evento','') }}" required></div>
+<div class="field"><label>Cidade *</label><input name="cidade" value="{{ form.get('cidade','') }}" required></div>
+<div class="field"><label>Modalidade *</label>
+<select name="id_modalidade" required><option value="">Selecione...</option>
+{% for m in modalidades %}<option value="{{ m.id }}" {% if form.get('id_modalidade','')|string == m.id|string %}selected{% endif %}>{{ m.nome }}</option>{% endfor %}
+</select></div>
+<div class="field"><label>Status</label><select name="ativo"><option value="1" {% if form.get('ativo',True) %}selected{% endif %}>ATIVO</option><option value="" {% if not form.get('ativo',True) %}selected{% endif %}>INATIVO</option></select></div>
+</div>
+<div class="actions"><button class="btn" type="submit">SALVAR EVENTO</button><a class="btn cancel" href="/eventos">CANCELAR</a></div>
+</form>
+</main></div></div>
+</body></html>

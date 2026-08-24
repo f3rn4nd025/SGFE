@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGFE WEB | FG Fotos Esportivas</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+.event-home-head{display:flex;justify-content:space-between;align-items:end;gap:18px;margin-bottom:16px}
+.event-home-head h1{margin:4px 0;font-size:34px}.event-home-head p{margin:0;color:#819596}
+.event-home-filter{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;border:1px solid #123f41;border-radius:13px;padding:15px;background:linear-gradient(145deg,#071314,#050809);margin-bottom:18px}
+.event-home-filter label{display:block;color:#12d8de;font-size:10px;font-weight:900;margin-bottom:6px;letter-spacing:.5px}
+.event-home-filter select{width:100%;box-sizing:border-box;background:#050b0c;color:#eefafa;border:1px solid #185154;border-radius:9px;padding:12px;min-height:46px;font:inherit;outline:none}
+.event-home-filter select:focus{border-color:#12d8de;box-shadow:0 0 0 2px rgba(18,216,222,.12)}
+.event-home-filter button{border:1px solid #27d873;background:#159451;color:#fff;border-radius:9px;padding:12px 18px;font-weight:900;cursor:pointer;min-height:46px}
+.event-home-banner{border:1px solid #123f41;border-radius:13px;background:linear-gradient(145deg,#0a1718,#050809);padding:18px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;gap:18px}
+.event-home-banner h2{margin:0 0 4px;font-size:23px}.event-home-banner p{margin:0;color:#819596}
+.event-home-tag{border:1px solid #1a8c61;color:#8fffc7;background:#09261e;border-radius:20px;padding:8px 12px;font-size:11px;font-weight:900;white-space:nowrap}
+.event-home-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.event-home-card{position:relative;overflow:hidden;border:1px solid #153e40;border-radius:13px;background:linear-gradient(145deg,#0a1516,#050809);padding:18px;min-height:125px;box-shadow:0 12px 28px rgba(0,0,0,.18)}
+.event-home-card:before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:#12d8de}.event-home-card.green:before{background:#27d873}.event-home-card.orange:before{background:#ffae3d}.event-home-card.red:before{background:#ff5964}
+.event-home-card .icon{font-size:24px;margin-bottom:10px}.event-home-card span{display:block;color:#819596;font-size:10px;font-weight:900;letter-spacing:.8px}.event-home-card strong{display:block;margin-top:8px;color:#fff;font-size:27px;line-height:1.1}.event-home-card small{display:block;margin-top:7px;color:#718889}.event-home-card.money strong{font-size:23px}.event-home-card.profit strong{color:#27d873}
+.event-home-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.event-home-actions a{display:inline-flex;align-items:center;gap:7px;text-decoration:none;border:1px solid #185154;background:#092628;color:#dffeff;border-radius:9px;padding:10px 14px;font-size:11px;font-weight:900}.event-home-actions a:hover{background:#0d3537;border-color:#12d8de}.event-home-actions a.primary{background:#159451;border-color:#27d873;color:#fff}
+.event-home-empty{border:1px dashed #185154;border-radius:13px;padding:28px;text-align:center;color:#819596}
+@media(max-width:1050px){.event-home-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.event-home-filter{grid-template-columns:1fr}.event-home-grid{grid-template-columns:1fr}.event-home-banner{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="shell">
+<header class="topbar">
+  <div class="brand"><div class="brand-mark"><img src="{{ url_for('static', filename='img/logo_fg.png') }}" alt="Fernando Souza Fotografia Esportiva"></div></div>
+  <div class="sgfe-head"><div class="sgfe-title">SGFE WEB</div><div class="sgfe-subtitle">SISTEMA DE GESTÃO FG FOTOS ESPORTIVAS</div></div>
+  <div class="event-box"><span>SGFE</span><strong id="eventoNome">Painel do Evento</strong><small id="eventoData">Visão geral</small></div>
+</header>
+<div class="layout">
+<aside class="sidebar">
+  <a class="menu active" href="/"><b>⌂</b> Painel</a>
+  <a class="menu" href="/atletas"><b>♙</b> Atletas</a>
+  <a class="menu" href="/agendamentos"><b>◫</b> Agendamentos</a>
+  <a class="menu" href="/vendas"><b>◎</b> Vendas / Pacotes</a>
+  <a class="menu" href="/entregas"><b>✓</b> Entregas</a>
+  <a class="menu" href="/pagamentos"><b>$</b> Pagamentos</a>
+  <a class="menu" href="/historico"><b>▤</b> Histórico</a>
+  <a class="menu" href="/configuracoes"><b>⚙</b> Configurações</a>
+  <div class="sidebar-bottom">FG FOTOS ESPORTIVAS<br><span>Foco, dedicação e paixão pelo esporte!</span></div>
+</aside>
+<main class="main dashboard-home">
+  <section class="event-home-head">
+    <div><div class="eyebrow">VISÃO GERAL</div><h1>Painel do Evento</h1><p>Acompanhe operação e financeiro do evento em uma única tela.</p></div>
+    <button class="refresh" onclick="carregarEvento()">↻ ATUALIZAR</button>
+  </section>
+
+  <section class="event-home-filter">
+    <div><label>EVENTO</label><select id="eventoSelect" onchange="carregarEvento()"><option value="">Carregando eventos...</option></select></div>
+    <button type="button" onclick="carregarEvento()">🔎 CONSULTAR EVENTO</button>
+  </section>
+
+  <div id="eventoArea"><div class="event-home-empty">Carregando o painel do evento...</div></div>
+
+  <footer>SGFE WEB • FG Fotos Esportivas • Banco: SGFE.accdb</footer>
+</main></div></div>
+<script>
+const money=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+let eventosCarregados=[];
+function card(icon,label,value,small,cls=''){return `<div class="event-home-card ${cls}"><div class="icon">${icon}</div><span>${label}</span><strong>${value}</strong><small>${small}</small></div>`;}
+function renderEvento(d){
+  const area=document.getElementById('eventoArea');
+  if(!d.evento){area.innerHTML='<div class="event-home-empty">Nenhum evento cadastrado.</div>';return;}
+  const e=d.evento, r=d.resumo;
+  area.innerHTML=`
+    <div class="event-home-banner"><div><h2>${esc(e.nome)}</h2><p>📅 ${esc(e.data)} &nbsp; • &nbsp; 📍 ${esc(e.cidade||'Cidade não informada')}</p></div><div class="event-home-tag">${e.ativo?'EVENTO ATIVO':'EVENTO INATIVO'}</div></div>
+    <section class="event-home-grid">
+      ${card('📋','AGENDAMENTOS',r.agendamentos,'atletas agendados')}
+      ${card('💰','VENDAS CONFIRMADAS',r.vendas,'pacotes vendidos')}
+      ${card('📦','ENTREGAS PENDENTES',r.entregas_pendentes,'OS aguardando entrega','orange')}
+      ${card('💳','PAGAMENTOS PENDENTES',r.pagamentos_pendentes,'sem pagamento completo','red')}
+      ${card('📈','TOTAL VENDIDO',money(r.total_vendido),'valor das vendas do evento','money')}
+      ${card('💵','TOTAL RECEBIDO',money(r.total_recebido),'pagamentos efetivamente recebidos','green money')}
+      ${card('🧾','DESPESAS',money(r.despesas),'custos vinculados ao evento','red money')}
+      ${card('🏆','LUCRO DO EVENTO',money(r.lucro),'recebido − despesas','green money profit')}
+    </section>
+    <div class="event-home-actions">
+      <a class="primary" href="/entregas?evento=${e.id}">📦 ENTREGAS</a>
+      <a href="/pagamentos?evento=${e.id}">💳 PAGAMENTOS</a>
+      <a href="/historico?evento=${e.id}">▤ HISTÓRICO</a>
+      <a href="/despesas?evento=${e.id}">🧾 DESPESAS</a>
+      <a href="/eventos/${e.id}/precos">💲 PREÇOS DO EVENTO</a>
+    </div>`;
+  document.getElementById('eventoNome').textContent=e.nome;
+  document.getElementById('eventoData').textContent=e.data+' • '+(e.cidade||'');
+}
+async function carregarEvento(){
+  try{
+    const select=document.getElementById('eventoSelect');
+    const id=select.value;
+    const r=await fetch('/api/evento-geral'+(id?'?evento='+encodeURIComponent(id):''));
+    const d=await r.json(); if(!d.ok) throw new Error(d.erro||'Erro ao carregar evento.');
+    if(!eventosCarregados.length){
+      eventosCarregados=d.eventos||[];
+      select.innerHTML=eventosCarregados.map(e=>`<option value="${e.id}">${esc(e.nome)} — ${esc(e.data)}${e.cidade?' — '+esc(e.cidade):''}</option>`).join('') || '<option value="">Nenhum evento</option>';
+      if(d.evento) select.value=String(d.evento.id);
+    }
+    renderEvento(d);
+  }catch(e){console.error(e);document.getElementById('eventoArea').innerHTML=`<div class="event-home-empty">⚠ ${esc(e.message)}</div>`;}
+}
+carregarEvento();
+</script>
+</body></html>

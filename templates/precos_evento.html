@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Preços do Evento | SGFE WEB</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+.page{max-width:1050px}.back{color:#12d8de;text-decoration:none;font-weight:800}
+.card{border:1px solid #123f41;background:linear-gradient(145deg,#0a1112,#050809);border-radius:12px;padding:24px;margin-top:20px}
+.event-head{border-bottom:1px solid #163b3d;padding-bottom:18px;margin-bottom:20px}
+.event-head h1{margin:5px 0;font-size:32px}.event-head p{color:#819596;margin:0}
+.price-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.field{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:12px;padding:14px;border:1px solid #123638;border-radius:8px;background:#070d0e}
+.field label{font-weight:900;color:#d8eeee}.field small{display:block;color:#71898a;font-weight:400;margin-top:3px}
+.field input{width:100%;box-sizing:border-box;background:#050b0c;color:#fff;border:1px solid #16494b;border-radius:7px;padding:12px;font:inherit;text-align:right}
+.actions{margin-top:22px;display:flex;gap:10px}.btn{border:1px solid #12d8de;background:#0b5b5e;color:#fff;border-radius:8px;padding:12px 18px;font-weight:900;cursor:pointer;text-decoration:none}
+.cancel{background:#11191a;border-color:#385354}.msg,.err{margin-bottom:16px;padding:11px 14px;border-radius:8px;font-weight:800}
+.msg{background:#06251e;border:1px solid #00a979;color:#1ee9a9}.err{background:#311414;border:1px solid #8d3434;color:#ffb0b0}
+.note{margin-top:18px;color:#789394;font-size:12px;line-height:1.5}
+@media(max-width:700px){.price-grid{grid-template-columns:1fr}.field{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="shell">
+<header class="topbar">
+<div class="brand"><div class="brand-mark"><img src="{{ url_for('static', filename='img/logo_fg.png') }}" alt="FG Fotos Esportivas"></div></div>
+<div class="sgfe-head"><div class="sgfe-title">SGFE WEB</div><div class="sgfe-subtitle">SISTEMA DE GESTÃO FG FOTOS ESPORTIVAS</div></div>
+</header>
+<div class="layout">
+<aside class="sidebar">
+<a class="menu" href="/">⌂ &nbsp; Painel</a>
+<a class="menu" href="/atletas">♙ &nbsp; Atletas</a>
+<a class="menu" href="/agendamentos">◫ &nbsp; Agendamentos</a>
+<a class="menu" href="/vendas">◎ &nbsp; Vendas / Pacotes</a>
+
+<a class="menu" href="/entregas">✓ &nbsp; Entregas</a>
+<a class="menu" href="/pagamentos">$ &nbsp; Pagamentos</a>
+<a class="menu" href="/historico">▤ &nbsp; Histórico</a>
+</aside>
+<main class="main page"><div class="page-actions"><a class="nav-btn" href="/">⌂ MENU PRINCIPAL</a><a class="nav-btn back-btn" href="#" onclick="history.back(); return false;">← VOLTAR</a></div>
+
+<a class="back" href="/eventos">← Voltar para Eventos</a>
+<div class="event-head">
+<h1>Preços do Evento</h1>
+<p><strong>{{ nome_evento }}</strong> — defina os valores por quantidade de provas.</p>
+</div>
+{% if mensagem %}<div class="msg">{{ mensagem }}</div>{% endif %}
+{% if erro %}<div class="err">{{ erro }}</div>{% endif %}
+<form method="post" class="card">
+<div class="price-grid">
+{% for qtd in range(1,11) %}
+<div class="field">
+<label>{{ qtd }} {% if qtd == 1 %}prova{% else %}provas{% endif %}
+<small>Preço do pacote</small></label>
+<input type="text" name="valor_{{ qtd }}" value="{% if valores.get(qtd) is not none %}{{ '%.2f'|format(valores.get(qtd))|replace('.',',') }}{% endif %}" placeholder="Ex.: 100,00">
+</div>
+{% endfor %}
+</div>
+<div class="actions">
+<button class="btn" type="submit">SALVAR PREÇOS</button>
+<a class="btn cancel" href="/eventos">VOLTAR</a>
+</div>
+<div class="note">
+Você pode preencher somente as quantidades que vende neste evento. O SGFE usará
+estes valores automaticamente quando a venda nascer do agendamento.
+</div>
+</form>
+</main></div></div>
+</body></html>
