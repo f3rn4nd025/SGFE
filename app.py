@@ -3296,7 +3296,7 @@ def web_agendamentos():
                 if status_row is None:
                     raise ValueError("O status AGENDADO não foi encontrado no SGFE.")
 
-                id_status = int(status_row[0])
+                id_status = access_int(status_row[0])
 
                 cur.execute("""
                     SELECT a.idagendamento, COALESCE(s.statusagendamento,'')
