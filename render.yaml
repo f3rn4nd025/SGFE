@@ -3,7 +3,7 @@ services:
     name: sgfe
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app_online_teste:app
+    startCommand: gunicorn app:app
     envVars:
       - key: SGFE_DB_MODE
         value: sqlite
