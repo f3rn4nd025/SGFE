@@ -1,5 +1,5 @@
-Flask>=3.0,<4
-Werkzeug>=3.0,<4
-pypdf>=5,<7
-PyMuPDF>=1.24,<2
-gunicorn>=23,<24
+Flask
+Werkzeug
+psycopg2-binary
+pypdf
+PyMuPDF

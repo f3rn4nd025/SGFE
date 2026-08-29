@@ -8,6 +8,12 @@ import uuid
 import io
 import shutil
 import sqlite3
+
+try:
+    import psycopg2
+except Exception:
+    psycopg2 = None
+
 from datetime import datetime
 
 try:
@@ -487,12 +493,16 @@ def aplicar_modal_sgfe(response):
 # BANCO DE DADOS
 # =========================================================
 # Local Windows: mantém o Access para não alterar o ambiente de testes.
-# Produção/Render: usa SQLite, com um arquivo separado para cada fotógrafo.
-# A autenticação dos fotógrafos fica no banco ADMIN; depois do login,
-# todas as operações passam exclusivamente para o banco daquele fotógrafo.
+# Render: usa o PostgreSQL definido em DATABASE_URL.
+# O modo SQLite continua disponível para testes locais/backup.
+#
+# IMPORTANTE: a lógica de negócio e as telas permanecem intactas.
+# Aqui somente trocamos a camada de conexão para que o SGFE consiga
+# conversar com o PostgreSQL do Render sem reescrever as consultas existentes.
 DB_PATH = os.environ.get("SGFE_ACCESS_DB", r"C:\FG FOTOS\SGFE.accdb")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_MODE = os.environ.get("SGFE_DB_MODE", "access").strip().lower()
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 DATA_DIR = os.environ.get("SGFE_DATA_DIR", os.path.join(BASE_DIR, "dados"))
 ADMIN_DB = os.path.join(DATA_DIR, "sgfe_admin.sqlite3")
 TENANT_DB_DIR = os.path.join(DATA_DIR, "bancos_fotografos")
@@ -502,11 +512,18 @@ os.makedirs(TENANT_DB_DIR, exist_ok=True)
 os.makedirs(BALIZAMENTO_FOLDER, exist_ok=True)
 
 
+def _is_postgres():
+    """Render usa PostgreSQL quando DATABASE_URL estiver disponível."""
+    return bool(DATABASE_URL) or DB_MODE == "postgres"
+
+
 def _is_sqlite():
-    return DB_MODE in {"sqlite", "render", "production", "postgres"}  # postgres reservado para etapa futura
+    return DB_MODE in {"sqlite", "render", "production"} and not _is_postgres()
 
 
 def _tenant_db_path(id_fotografo):
+    if _is_postgres():
+        return f"fotografo_{access_int(id_fotografo)}"
     ext = ".sqlite3" if _is_sqlite() else ".accdb"
     return os.path.join(TENANT_DB_DIR, f"fotografo_{access_int(id_fotografo)}{ext}")
 
@@ -595,30 +612,167 @@ class _SQLiteTableRow:
         self.table_name = name
 
 
+class PostgreSQLCompatCursor:
+    """Adapta as consultas Access/SQLite existentes para PostgreSQL."""
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    @property
+    def description(self):
+        return self._cursor.description
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    def fetchmany(self, size=None):
+        return self._cursor.fetchmany() if size is None else self._cursor.fetchmany(size)
+
+    def __iter__(self):
+        return iter(self._cursor)
+
+    def execute(self, sql, params=None):
+        sql = _postgres_sql(sql)
+        if params is None:
+            self._cursor.execute(sql)
+        else:
+            self._cursor.execute(sql, params)
+        return self
+
+    def executemany(self, sql, seq_of_params):
+        self._cursor.executemany(_postgres_sql(sql), seq_of_params)
+        return self
+
+    def tables(self, tableType="TABLE"):
+        self._cursor.execute("""
+            SELECT tablename
+            FROM pg_catalog.pg_tables
+            WHERE schemaname = current_schema()
+            ORDER BY tablename
+        """)
+        return [_PostgreSQLTableRow(r[0]) for r in self._cursor.fetchall()]
+
+    def close(self):
+        return self._cursor.close()
+
+
+class _PostgreSQLTableRow:
+    def __init__(self, name):
+        self.table_name = name
+
+
+class PostgreSQLCompatConnection:
+    def __init__(self, url, schema="public"):
+        if psycopg2 is None:
+            raise RuntimeError("psycopg2-binary não está instalado. Adicione psycopg2-binary ao requirements.txt.")
+        self.url = url
+        self.schema = schema or "public"
+        self._conn = psycopg2.connect(url, connect_timeout=15)
+        self._conn.autocommit = False
+        cur = self._conn.cursor()
+        cur.execute("SET search_path TO \"public\"" if self.schema == "public" else f'SET search_path TO "{self.schema}", "public"')
+        cur.close()
+
+    def cursor(self):
+        return PostgreSQLCompatCursor(self._conn.cursor())
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def close(self):
+        return self._conn.close()
+
+    def tables(self, tableType="TABLE"):
+        cur = self._conn.cursor()
+        cur.execute("""
+            SELECT tablename
+            FROM pg_catalog.pg_tables
+            WHERE schemaname = current_schema()
+            ORDER BY tablename
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        return [_PostgreSQLTableRow(r[0]) for r in rows]
+
+
 def _sqlite_sql(sql):
     if not isinstance(sql, str):
         return sql
     s = sql
-    # Access identity retrieval.
     s = re.sub(r"SELECT\s+@@IDENTITY", "SELECT last_insert_rowid()", s, flags=re.I)
-    # Access SELECT TOP n -> SQLite LIMIT n. Omit only the first TOP in a statement.
     m = re.search(r"\bSELECT\s+TOP\s+(\d+)\s+", s, flags=re.I | re.S)
     if m:
         n = m.group(1)
         s = s[:m.start()] + re.sub(r"\bSELECT\s+TOP\s+\d+\s+", "SELECT ", s[m.start():], count=1, flags=re.I)
-        # LIMIT belongs after ORDER BY / WHERE / whole SELECT, but before a trailing semicolon.
         semi = ";" if s.rstrip().endswith(";") else ""
         core = s.rstrip(";").rstrip()
         core += f" LIMIT {n}"
         s = core + semi
-    # Access DDL types used by the auto-created tables.
     s = re.sub(r"\bLONG\b", "INTEGER", s, flags=re.I)
     s = re.sub(r"\bYESNO\b", "INTEGER", s, flags=re.I)
     s = re.sub(r"\bAUTOINCREMENT\s+PRIMARY\s+KEY", "INTEGER PRIMARY KEY AUTOINCREMENT", s, flags=re.I)
     return s
 
 
-def _abrir_conexao(db_path):
+def _postgres_sql(sql):
+    """Converte somente as diferenças de dialeto necessárias pelo SGFE."""
+    if not isinstance(sql, str):
+        return sql
+    s = sql
+
+    # Access identity -> PostgreSQL sequence da última inserção.
+    s = re.sub(r"SELECT\s+@@IDENTITY", "SELECT LASTVAL()", s, flags=re.I)
+
+    # Access SELECT TOP n -> PostgreSQL LIMIT n.
+    m = re.search(r"\bSELECT\s+TOP\s+(\d+)\s+", s, flags=re.I | re.S)
+    if m:
+        n = m.group(1)
+        s = s[:m.start()] + re.sub(r"\bSELECT\s+TOP\s+\d+\s+", "SELECT ", s[m.start():], count=1, flags=re.I)
+        semi = ";" if s.rstrip().endswith(";") else ""
+        core = s.rstrip(";").rstrip()
+        core += f" LIMIT {n}"
+        s = core + semi
+
+    # Colchetes do Access. PostgreSQL usa identificadores sem aspas em minúsculas.
+    s = re.sub(r"\[([^\]]+)\]", r"\1", s)
+
+    # Funções usadas pelo código legado.
+    s = re.sub(r"\bUCASE\s*\(", "UPPER(", s, flags=re.I)
+    s = re.sub(r"\bLCASE\s*\(", "LOWER(", s, flags=re.I)
+    s = re.sub(
+        r"\bIIf\s*\(\s*IsNull\s*\(\s*([^\)]+)\s*\)\s*,\s*([^,]+)\s*,\s*([^\)]+)\s*\)",
+        r"CASE WHEN \1 IS NULL THEN \2 ELSE \3 END",
+        s,
+        flags=re.I,
+    )
+    s = re.sub(r"\bNow\s*\(\s*\)", "CURRENT_TIMESTAMP", s, flags=re.I)
+
+    # Tipos Access usados pelas tabelas auxiliares criadas pelo próprio app.
+    s = re.sub(r"\bLONG\b", "INTEGER", s, flags=re.I)
+    s = re.sub(r"\bYESNO\b", "BOOLEAN", s, flags=re.I)
+    s = re.sub(r"\bDATETIME\b", "TIMESTAMP", s, flags=re.I)
+    s = re.sub(r"\bTEXT\s*\(\s*(\d+)\s*\)", r"VARCHAR(\1)", s, flags=re.I)
+    s = re.sub(r"\bAUTOINCREMENT\s+PRIMARY\s+KEY", "BIGSERIAL PRIMARY KEY", s, flags=re.I)
+
+    # As consultas atuais usam ? como placeholder. psycopg2 usa %s.
+    s = s.replace("?", "%s")
+    return s
+
+
+def _abrir_conexao(db_path=None, schema="public"):
+    if _is_postgres():
+        if not DATABASE_URL:
+            raise RuntimeError("DATABASE_URL não foi configurada no Render.")
+        return PostgreSQLCompatConnection(DATABASE_URL, schema=schema)
     if _is_sqlite():
         return SQLiteCompatConnection(db_path)
     if pyodbc is None:
@@ -659,8 +813,31 @@ def _limpar_dados_tenant(conn):
 
 
 def _criar_banco_fotografo(id_fotografo):
-    """Cria o banco privado do fotógrafo a partir do banco administrativo/semente."""
+    """Cria o banco/esquema privado do fotógrafo a partir do banco administrativo."""
     destino = _tenant_db_path(id_fotografo)
+
+    if _is_postgres():
+        schema = destino
+        admin = PostgreSQLCompatConnection(DATABASE_URL, schema="public")
+        try:
+            cur = admin.cursor()
+            cur.execute("SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname='public' ORDER BY tablename")
+            tabelas = [r[0] for r in cur.fetchall()]
+            cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
+            for tabela in tabelas:
+                cur.execute(f'CREATE TABLE IF NOT EXISTS "{schema}"."{tabela}" (LIKE public."{tabela}" INCLUDING ALL)')
+                cur.execute(f'INSERT INTO "{schema}"."{tabela}" SELECT * FROM public."{tabela}"')
+            admin.commit()
+        finally:
+            admin.close()
+
+        conn = PostgreSQLCompatConnection(DATABASE_URL, schema=schema)
+        try:
+            _limpar_dados_tenant(conn)
+        finally:
+            conn.close()
+        return destino
+
     if os.path.exists(destino):
         return destino
     if _is_sqlite():
@@ -690,7 +867,6 @@ def _criar_banco_fotografo(id_fotografo):
     finally:
         conn.close()
     return destino
-
 
 
 ALLOWED_BALIZAMENTO_EXTENSIONS = {"pdf"}
@@ -993,20 +1169,26 @@ def _ensure_fotografos(conn):
     conn.commit()
 
 def get_connection():
-    # ADMIN trabalha exclusivamente no banco administrativo.
-    # Cada fotógrafo trabalha exclusivamente no seu banco privado.
-    # No Render/SQLite, o banco administrativo fica em ADMIN_DB.
-    if session.get("perfil") == "FOTOGRAFO" and session.get("fotografo_id"):
-        db_path = _tenant_db_path(session["fotografo_id"])
-        if not os.path.exists(db_path):
-            _criar_banco_fotografo(session["fotografo_id"])
+    # ADMIN trabalha no banco administrativo.
+    # Cada fotógrafo trabalha no seu schema privado quando o SGFE está no PostgreSQL.
+    if _is_postgres():
+        if session.get("perfil") == "FOTOGRAFO" and session.get("fotografo_id"):
+            schema = _tenant_db_path(session["fotografo_id"])
+            conn = PostgreSQLCompatConnection(DATABASE_URL, schema=schema)
+        else:
+            conn = PostgreSQLCompatConnection(DATABASE_URL, schema="public")
     else:
-        db_path = ADMIN_DB if _is_sqlite() else DB_PATH
+        if session.get("perfil") == "FOTOGRAFO" and session.get("fotografo_id"):
+            db_path = _tenant_db_path(session["fotografo_id"])
+            if not os.path.exists(db_path):
+                _criar_banco_fotografo(session["fotografo_id"])
+        else:
+            db_path = ADMIN_DB if _is_sqlite() else DB_PATH
 
-    if not os.path.exists(db_path):
-        raise FileNotFoundError(f"Banco não encontrado: {db_path}")
+        if not os.path.exists(db_path):
+            raise FileNotFoundError(f"Banco não encontrado: {db_path}")
 
-    conn = _abrir_conexao(db_path)
+        conn = _abrir_conexao(db_path)
     _ensure_status_pagamento(conn)
     _ensure_status_venda_cancelado(conn)
     _ensure_status_agendamento_cancelado(conn)
