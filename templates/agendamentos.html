@@ -256,8 +256,12 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 <td><span class="pill {% if 'CANCEL' not in (r.Status or '')|upper %}ok{% endif %}">{{ r.Status or 'AGENDADO' }}</span></td>
 <td>
 {% if r.Telefone %}
-<a class="row-action whatsapp" target="_blank" rel="noopener"
-href="https://wa.me/{{ r.Telefone|replace('(','')|replace(')','')|replace('-','')|replace(' ','')|replace('+','') }}?text={{ ('Olá, ' ~ (r.Contato or r.Atleta) ~ '!\n\nTudo bem?\n\nO balizamento do evento ' ~ r.Evento ~ ' já está disponível!\n\nAgora precisamos definir a quantidade e quais provas ' ~ (('a atleta ' if (r.Sexo or '')|upper in ['F','FEMININO','FEMININA'] else 'o atleta ') ~ r.Atleta) ~ ' irá disputar para finalizarmos a contratação da cobertura fotográfica.\n\nAssim que você me passar essas informações, verifico a disponibilidade, calculo o valor do pacote e já deixamos tudo organizado para o evento.\n\nQualquer dúvida, estou à disposição.\n\nFernando - Fotografia Esportiva')|urlencode }}">WHATSAPP</a>
+<a class="row-action whatsapp" href="#"
+data-whatsapp="{{ r.Telefone }}"
+data-contato="{{ r.Contato or '' }}"
+data-evento="{{ r.Evento }}"
+data-atleta="{{ r.Atleta }}"
+data-sexo="{{ r.Sexo or '' }}">WHATSAPP</a>
 {% else %}
 <span class="row-action wa-disabled">SEM TELEFONE</span>
 {% endif %}
@@ -275,6 +279,34 @@ href="https://wa.me/{{ r.Telefone|replace('(','')|replace(')','')|replace('-',''
 </main></div></div>
 
 <script>
+// WhatsApp: usa exatamente a mesma normalização da tela ATLETAS.
+document.querySelectorAll('[data-whatsapp]').forEach(btn => {
+  let phone = (btn.getAttribute('data-whatsapp') || '').replace(/\D/g, '');
+  if (phone.length === 10 || phone.length === 11) phone = '55' + phone;
+  if (phone.length === 13 && phone.startsWith('55')) {
+    // já está no formato internacional brasileiro
+  }
+  if (phone) {
+    const contato = (btn.getAttribute('data-contato') || '').trim();
+    const atleta = (btn.getAttribute('data-atleta') || '').trim() || 'você';
+    const sexo = (btn.getAttribute('data-sexo') || '').trim().toUpperCase();
+    const evento = (btn.getAttribute('data-evento') || '').trim();
+    const artigo = ['F','FEMININO','FEMININA'].includes(sexo) ? 'a atleta' : 'o atleta';
+    const mensagem =
+      'Olá, ' + (contato || atleta) + '!\n\n' +
+      'Tudo bem?\n\n' +
+      'O balizamento do evento ' + evento + ' já está disponível!\n\n' +
+      'Agora precisamos definir a quantidade e quais provas ' + artigo + ' ' + atleta +
+      ' irá disputar para finalizarmos a contratação da cobertura fotográfica.\n\n' +
+      'Assim que você me passar essas informações, verifico a disponibilidade, calculo o valor do pacote e já deixamos tudo organizado para o evento.\n\n' +
+      'Qualquer dúvida, estou à disposição.\n\n' +
+      'Fernando - Fotografia Esportiva';
+    btn.href = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(mensagem);
+    btn.target = '_blank';
+    btn.rel = 'noopener noreferrer';
+  }
+});
+
 let atletaIndex=-1;
 
 function itensAtletasVisiveis(){
