@@ -613,16 +613,9 @@ class _SQLiteTableRow:
 
 
 class PostgreSQLCompatCursor:
-    """Adapta as consultas Access/SQLite existentes para PostgreSQL.
-
-    O banco migrado preserva os nomes originais do Access (ex.:
-    tblVendaPacotes e IDVenda). Como PostgreSQL transforma identificadores
-    sem aspas em minúsculos, esta camada consulta o catálogo e recoloca
-    aspas nos nomes reais antes de executar o SQL legado.
-    """
-    def __init__(self, cursor, identifier_map=None):
+    """Adapta as consultas Access/SQLite existentes para PostgreSQL."""
+    def __init__(self, cursor):
         self._cursor = cursor
-        self._identifier_map = identifier_map or {}
 
     @property
     def description(self):
@@ -645,7 +638,7 @@ class PostgreSQLCompatCursor:
         return iter(self._cursor)
 
     def execute(self, sql, params=None):
-        sql = _postgres_sql(sql, self._identifier_map)
+        sql = _postgres_sql(sql)
         if params is None:
             self._cursor.execute(sql)
         else:
@@ -653,7 +646,7 @@ class PostgreSQLCompatCursor:
         return self
 
     def executemany(self, sql, seq_of_params):
-        self._cursor.executemany(_postgres_sql(sql, self._identifier_map), seq_of_params)
+        self._cursor.executemany(_postgres_sql(sql), seq_of_params)
         return self
 
     def tables(self, tableType="TABLE"):
@@ -685,43 +678,9 @@ class PostgreSQLCompatConnection:
         cur = self._conn.cursor()
         cur.execute("SET search_path TO \"public\"" if self.schema == "public" else f'SET search_path TO "{self.schema}", "public"')
         cur.close()
-        self._identifier_map = self._load_postgres_identifiers()
-
-    def _load_postgres_identifiers(self):
-        """Carrega nomes exatos de tabelas e colunas preservados na migração."""
-        result = {}
-        cur = self._conn.cursor()
-        try:
-            cur.execute("""
-                SELECT schemaname, tablename
-                FROM pg_catalog.pg_tables
-                WHERE schemaname = current_schema()
-                   OR schemaname = 'public'
-            """)
-            for schema_name, table_name in cur.fetchall():
-                result[str(table_name).lower()] = str(table_name)
-
-            cur.execute("""
-                SELECT table_schema, table_name, column_name
-                FROM information_schema.columns
-                WHERE table_schema = current_schema()
-                   OR table_schema = 'public'
-            """)
-            for _schema_name, _table_name, column_name in cur.fetchall():
-                # Colunas iguais aparecem em várias tabelas, portanto o
-                # mapeamento global só é usado quando não houver ambiguidade.
-                key = str(column_name).lower()
-                exact = str(column_name)
-                if key not in result:
-                    result[key] = exact
-                elif result[key] != exact:
-                    result[key] = None
-        finally:
-            cur.close()
-        return result
 
     def cursor(self):
-        return PostgreSQLCompatCursor(self._conn.cursor(), self._identifier_map)
+        return PostgreSQLCompatCursor(self._conn.cursor())
 
     def commit(self):
         return self._conn.commit()
@@ -764,8 +723,8 @@ def _sqlite_sql(sql):
     return s
 
 
-def _postgres_sql(sql, identifier_map=None):
-    """Converte o SQL legado Access para PostgreSQL sem perder maiúsculas."""
+def _postgres_sql(sql):
+    """Converte somente as diferenças de dialeto necessárias pelo SGFE."""
     if not isinstance(sql, str):
         return sql
     s = sql
@@ -806,35 +765,6 @@ def _postgres_sql(sql, identifier_map=None):
 
     # As consultas atuais usam ? como placeholder. psycopg2 usa %s.
     s = s.replace("?", "%s")
-
-    # A migração preservou os nomes do Access com aspas. Sem isso,
-    # PostgreSQL procura por tblvendapacotes em vez de tblVendaPacotes.
-    if identifier_map:
-        import re as _re
-        tokens = []
-        pos = 0
-        for m in _re.finditer(r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"", s):
-            if m.start() > pos:
-                tokens.append((False, s[pos:m.start()]))
-            tokens.append((True, m.group(0)))
-            pos = m.end()
-        tokens.append((False, s[pos:]))
-
-        partes = []
-        for protegido, trecho in tokens:
-            if protegido:
-                partes.append(trecho)
-                continue
-            def _quote_identifier(m):
-                nome = m.group(0)
-                if nome.startswith('%'):
-                    return nome
-                exato = identifier_map.get(nome.lower())
-                if exato and exato.lower() == nome.lower():
-                    return '"' + exato.replace('"', '""') + '"'
-                return nome
-            partes.append(_re.sub(r"(?<![\"%])\b[A-Za-z_][A-Za-z0-9_]*\b", _quote_identifier, trecho))
-        s = ''.join(partes)
     return s
 
 
@@ -1067,8 +997,6 @@ def _ensure_status_pagamento(conn):
     try:
         cur.execute("SELECT TOP 1 StatusPagamento FROM tblVendaPacotes")
     except Exception:
-        if _is_postgres():
-            conn.rollback()
         cur.execute("ALTER TABLE tblVendaPacotes ADD COLUMN StatusPagamento TEXT(20)")
         conn.commit()
 
@@ -1240,6 +1168,101 @@ def _ensure_fotografos(conn):
     """)
     conn.commit()
 
+def _log_postgres_status(conn, origem="get_connection"):
+    """Registra no log do Render exatamente qual banco/schema o SGFE está usando."""
+    if not _is_postgres():
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT current_database(), current_schema(), current_user")
+        info = cur.fetchone() or ("", "", "")
+        cur.execute("""
+            SELECT tablename
+            FROM pg_catalog.pg_tables
+            WHERE schemaname = current_schema()
+            ORDER BY tablename
+        """)
+        tabelas = [str(r[0]) for r in cur.fetchall()]
+        cur.close()
+        importantes = [
+            "tblclientes", "tblevento", "tblagendamentos",
+            "tblvendapacotes", "tblpagamento", "tblbalizamentoprovas"
+        ]
+        presentes = [t for t in importantes if t in tabelas]
+        print(
+            f"[SGFE-DB] {origem} | database={info[0]} | schema={info[1]} "
+            f"| user={info[2]} | tabelas={len(tabelas)} | importantes={presentes}",
+            flush=True
+        )
+    except Exception as e:
+        print(f"[SGFE-DB] falha ao diagnosticar conexão: {e}", flush=True)
+
+
+@app.route("/api/diagnostico-banco")
+def diagnostico_banco():
+    """Diagnóstico somente leitura da conexão PostgreSQL do SGFE."""
+    if not session.get("admin_autenticado"):
+        return jsonify({"ok": False, "erro": "Acesso restrito ao administrador."}), 403
+    if not _is_postgres():
+        return jsonify({
+            "ok": False,
+            "modo": DB_MODE,
+            "erro": "O SGFE não está em modo PostgreSQL nesta instância.",
+        }), 500
+    if not DATABASE_URL:
+        return jsonify({"ok": False, "erro": "DATABASE_URL não está configurada."}), 500
+
+    conn = None
+    try:
+        conn = PostgreSQLCompatConnection(DATABASE_URL, schema="public")
+        cur = conn.cursor()
+        cur.execute("SELECT current_database(), current_schema(), current_user")
+        banco, schema, usuario = cur.fetchone()
+
+        tabelas_alvo = [
+            "tblModalidades", "tblSexos", "tblStatusAgendamento",
+            "tblStatusVenda", "tblFormaPagamento", "tblEquipes",
+            "tblFotografos", "tblEvento", "tblClientes", "tblPrecoEvento",
+            "tblDespesasEvento", "tblAgendamentos", "tblVendaPacotes",
+            "tblPagamento", "tblParcelas", "tblBalizamentoProvas",
+            "tblBalizamentoManualProvas", "tblMarcacaoBalizamento",
+            "tblFiltroCarteira"
+        ]
+        resultado = {}
+        for tabela in tabelas_alvo:
+            nome = tabela.lower()
+            cur.execute(
+                "SELECT COUNT(*) FROM pg_catalog.pg_class c "
+                "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+                "WHERE n.nspname=current_schema() AND c.relname=%s",
+                [nome]
+            )
+            existe = bool((cur.fetchone() or [0])[0])
+            if existe:
+                cur.execute(f'SELECT COUNT(*) FROM "{nome}"')
+                resultado[tabela] = int((cur.fetchone() or [0])[0])
+            else:
+                resultado[tabela] = None
+
+        cur.close()
+        return jsonify({
+            "ok": True,
+            "modo": "postgresql",
+            "database": banco,
+            "schema": schema,
+            "usuario": usuario,
+            "tabelas": resultado,
+        })
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        return jsonify({"ok": False, "erro": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
 def get_connection():
     # ADMIN trabalha no banco administrativo.
     # Cada fotógrafo trabalha no seu schema privado quando o SGFE está no PostgreSQL.
@@ -1261,6 +1284,8 @@ def get_connection():
             raise FileNotFoundError(f"Banco não encontrado: {db_path}")
 
         conn = _abrir_conexao(db_path)
+
+    _log_postgres_status(conn)
     _ensure_status_pagamento(conn)
     _ensure_status_venda_cancelado(conn)
     _ensure_status_agendamento_cancelado(conn)
