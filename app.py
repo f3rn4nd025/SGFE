@@ -884,6 +884,12 @@ def _ensure_event_balizamento_fields(conn):
         try:
             cur.execute(f"SELECT TOP 1 [{nome}] FROM tblEvento")
         except Exception:
+            # PostgreSQL aborta a transação quando o SELECT falha.
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            cur = conn.cursor()
             cur.execute(f"ALTER TABLE tblEvento ADD COLUMN [{nome}] {tipo}")
             conn.commit()
 
@@ -992,15 +998,24 @@ def _evento_tem_balizamento(cur, evento_id):
 
 
 def _ensure_status_pagamento(conn):
-    """Garante o status financeiro da OS, incluindo CORTESIA."""
+    """Garante o campo StatusPagamento sem deixar transação PostgreSQL abortada."""
     cur = conn.cursor()
     try:
         cur.execute("SELECT TOP 1 StatusPagamento FROM tblVendaPacotes")
+        cur.fetchone()
     except Exception:
+        # No PostgreSQL, uma consulta que falha deixa a transação em estado
+        # aborted. É obrigatório fazer rollback antes de executar o ALTER TABLE.
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        cur = conn.cursor()
         cur.execute("ALTER TABLE tblVendaPacotes ADD COLUMN StatusPagamento TEXT(20)")
         conn.commit()
 
     # Migra registros antigos: quem já tem pagamento vira PAGO; os demais ABERTO.
+    cur = conn.cursor()
     cur.execute("""
         UPDATE tblVendaPacotes
         SET StatusPagamento='pago'
