@@ -2449,16 +2449,31 @@ def module_page(page, title, subtitle, table_name, search_label):
 
 @app.route("/atletas")
 def web_atletas():
+    """
+    ATLETAS SOMENTE.
+
+    O Painel (/api/evento-geral) não é alterado nesta versão.
+
+    A consulta retorna os 53 clientes do PostgreSQL e cria aliases para
+    os nomes de campos usados pelo template. Isso evita a situação em que
+    a consulta encontra os registros, mas a tabela fica visualmente vazia
+    porque o template procura outro nome de chave.
+    """
     search = request.args.get("q", "").strip()
     conn = get_connection()
+
     try:
         cur = conn.cursor()
+
         sql = """
         SELECT
             C.IDCliente,
+            C.Nome,
             C.Nome AS Atleta,
             X.Sexo,
+            X.Sexo AS Categoria,
             C.AnoNascimento,
+            E.NomeEquipe,
             E.NomeEquipe AS Equipe,
             M.Modalidade,
             C.Telefone,
@@ -2470,7 +2485,9 @@ def web_atletas():
         LEFT JOIN tblModalidades AS M ON C.IDModalidade=M.IDModalidade)
         LEFT JOIN tblSexos AS X ON C.IDSexo=X.IDSexo
         """
-        params=[]
+
+        params = []
+
         if search:
             sql += """
             WHERE C.Nome LIKE ?
@@ -2480,36 +2497,99 @@ def web_atletas():
             """
             like = "%" + search + "%"
             params = [like, like, like, like]
+
         sql += " ORDER BY C.Nome"
 
         cur.execute(sql, params)
-        columns=[d[0] for d in cur.description]
-        data=[]
-        for row in cur.fetchall():
-            item={}
-            for col,value in zip(columns,row):
-                if value is None:
-                    value=""
-                else:
-                    value=str(value)
-                item[col]=value
+        rows = cur.fetchall()
+
+        data = []
+
+        for row in rows:
+            # Acesso por posição, sem depender do nome retornado pelo driver.
+            id_cliente = row[0]
+            nome = row[1]
+            atleta = row[2]
+            sexo = row[3]
+            categoria = row[4]
+            ano = row[5]
+            nome_equipe = row[6]
+            equipe = row[7]
+            modalidade = row[8]
+            telefone = row[9]
+            contato = row[10]
+            cidade = row[11]
+            estado = row[12]
+
+            # Mantemos todos os aliases necessários para o template.
+            item = {
+                "IDCliente": "" if id_cliente is None else str(id_cliente),
+                "id": "" if id_cliente is None else str(id_cliente),
+
+                "Nome": "" if nome is None else str(nome),
+                "nome": "" if nome is None else str(nome),
+
+                "Atleta": "" if atleta is None else str(atleta),
+                "atleta": "" if atleta is None else str(atleta),
+
+                "Sexo": "" if sexo is None else str(sexo),
+                "sexo": "" if sexo is None else str(sexo),
+
+                "Categoria": "" if categoria is None else str(categoria),
+                "categoria": "" if categoria is None else str(categoria),
+
+                "AnoNascimento": "" if ano is None else str(ano),
+                "ano_nascimento": "" if ano is None else str(ano),
+
+                "NomeEquipe": "" if nome_equipe is None else str(nome_equipe),
+                "Equipe": "" if equipe is None else str(equipe),
+                "equipe": "" if equipe is None else str(equipe),
+
+                "Modalidade": "" if modalidade is None else str(modalidade),
+                "modalidade": "" if modalidade is None else str(modalidade),
+
+                "Telefone": "" if telefone is None else str(telefone),
+                "telefone": "" if telefone is None else str(telefone),
+
+                "Contato": "" if contato is None else str(contato),
+                "contato": "" if contato is None else str(contato),
+
+                "Cidade": "" if cidade is None else str(cidade),
+                "cidade": "" if cidade is None else str(cidade),
+
+                "Estado": "" if estado is None else str(estado),
+                "estado": "" if estado is None else str(estado),
+            }
+
             data.append(item)
+
     finally:
         conn.close()
 
     return render_template(
-        "module.html", page="atletas",
+        "module.html",
+        page="atletas",
         title="Atletas",
         subtitle="Cadastro e histórico dos atletas do SGFE",
-        columns=["IDCliente","Atleta","Sexo","AnoNascimento","Equipe",
-                 "Modalidade","Telefone","Contato","Cidade","Estado"],
-        data=data, search=search,
+        columns=[
+            "IDCliente",
+            "Atleta",
+            "Sexo",
+            "AnoNascimento",
+            "Equipe",
+            "Modalidade",
+            "Telefone",
+            "Contato",
+            "Cidade",
+            "Estado"
+        ],
+        data=data,
+        search=search,
         search_label="Pesquisar atleta, equipe ou telefone...",
         currency_columns=[],
         mensagem=request.args.get("ok", ""),
         erro=request.args.get("erro", "")
     )
-
 
 
 @app.route("/atletas/<int:cliente_id>/editar", methods=["GET", "POST"])
