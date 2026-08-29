@@ -3210,7 +3210,10 @@ def imprimir_balizamento_evento(evento_id):
 @app.route("/agendamentos", methods=["GET", "POST"])
 def web_agendamentos():
     """
-    V15 - SOMENTE AGENDAMENTOS.
+    V16 - SOMENTE AGENDAMENTOS.
+
+    Correção: joins entre IDs do PostgreSQL são comparados como TEXT,
+    pois a migração possui alguns IDs com tipos diferentes (varchar/integer).
 
     Painel e Atletas permanecem intocados.
     No PostgreSQL, esta rota usa psycopg2 diretamente, sem passar pela
@@ -3291,8 +3294,8 @@ def web_agendamentos():
                     SELECT a.idagendamento, COALESCE(s.statusagendamento,'')
                     FROM tblagendamentos a
                     LEFT JOIN tblstatusagendamento s
-                      ON a.idstatusagendamento=s.idstatusagendamento
-                    WHERE a.idcliente=%s AND a.idevento=%s
+                      ON a.idstatusagendamento::text=s.idstatusagendamento::text
+                    WHERE a.idcliente::text=%s::text AND a.idevento::text=%s::text
                     ORDER BY a.idagendamento DESC
                 """, (id_cliente_int, id_evento_int))
 
@@ -3336,11 +3339,11 @@ def web_agendamentos():
                     COALESCE(a.observacoes,'') AS observacoes,
                     a.idvendas
                 FROM tblagendamentos a
-                LEFT JOIN tblclientes c ON a.idcliente=c.idcliente
-                LEFT JOIN tblevento e ON a.idevento=e.idevento
+                LEFT JOIN tblclientes c ON a.idcliente::text=c.idcliente::text
+                LEFT JOIN tblevento e ON a.idevento::text=e.idevento::text
                 LEFT JOIN tblstatusagendamento sa
-                  ON a.idstatusagendamento=sa.idstatusagendamento
-                LEFT JOIN tblsexos sx ON c.idsexo=sx.idsexo
+                  ON a.idstatusagendamento::text=sa.idstatusagendamento::text
+                LEFT JOIN tblsexos sx ON c.idsexo::text=sx.idsexo::text
                 WHERE (a.idvendas IS NULL OR a.idvendas=0)
                   AND NOT EXISTS (
                       SELECT 1
@@ -3423,8 +3426,8 @@ def web_agendamentos():
                        COALESCE(eq.nomeequipe,''),
                        COALESCE(sx.sexo,'')
                 FROM tblclientes c
-                LEFT JOIN tblequipes eq ON c.idequipe=eq.idequipe
-                LEFT JOIN tblsexos sx ON c.idsexo=sx.idsexo
+                LEFT JOIN tblequipes eq ON c.idequipe::text=eq.idequipe::text
+                LEFT JOIN tblsexos sx ON c.idsexo::text=sx.idsexo::text
                 ORDER BY c.nome
             """)
             for r in cur.fetchall():
@@ -3650,8 +3653,8 @@ def web_agendamentos():
             pass
 
         erro = str(e)
-        print(f"[SGFE-AGENDAMENTOS-V15] ERRO: {e}", flush=True)
-        print(f"[SGFE-AGENDAMENTOS-V15] tipo: {type(e).__name__}", flush=True)
+        print(f"[SGFE-AGENDAMENTOS-V16] ERRO: {e}", flush=True)
+        print(f"[SGFE-AGENDAMENTOS-V16] tipo: {type(e).__name__}", flush=True)
 
     finally:
         try:
