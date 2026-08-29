@@ -2015,62 +2015,102 @@ def logout():
 
 @app.route("/api/evento-geral")
 def api_evento_geral():
-    """V1: busca somente os eventos para o Painel."""
+    """Retorna os indicadores do evento para o painel inicial."""
     conn = None
     try:
         conn = get_connection()
         cur = conn.cursor()
-        print("[SGFE-API] EVENTO-GERAL V1 - BUSCANDO SOMENTE EVENTOS", flush=True)
-
-        cur.execute("""
-            SELECT idevento, nomeevento, dataevento, cidade
-            FROM public.tblevento
-            ORDER BY dataevento DESC, nomeevento
-        """)
-
         eventos = []
-        for row in cur.fetchall():
-            data_evento = row[2]
-            if hasattr(data_evento, "strftime"):
-                data_evento = data_evento.strftime("%d/%m/%Y")
-            elif data_evento is None:
-                data_evento = ""
-            else:
-                data_evento = str(data_evento)
-
+        cur.execute("""
+            SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
+            FROM tblEvento
+            ORDER BY DataEvento DESC, NomeEvento
+        """)
+        for r in cur.fetchall():
             eventos.append({
-                "id": access_int(row[0]),
-                "nome": str(row[1] or ""),
-                "data": data_evento,
-                "cidade": str(row[3] or ""),
+                "id": access_int(r[0]),
+                "nome": str(r[1] or ""),
+                "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
+                "cidade": str(r[3] or ""),
+                "ativo": bool(r[4]) if r[4] is not None else False,
             })
 
-        print(f"[SGFE-API] EVENTO-GERAL V1 - {len(eventos)} EVENTOS ENCONTRADOS", flush=True)
+        evento_id_raw = request.args.get("evento", "").strip()
+        evento_id = access_int(evento_id_raw) if evento_id_raw else (eventos[0]["id"] if eventos else 0)
+        resumo = {
+            "agendamentos": 0, "vendas": 0, "entregas_pendentes": 0,
+            "pagamentos_pendentes": 0, "total_vendido": 0.0,
+            "total_recebido": 0.0, "despesas": 0.0, "lucro": 0.0
+        }
+        evento_info = None
 
-        return jsonify({
-            "ok": True,
-            "eventos": eventos,
-            "evento": None,
-            "resumo": {
-                "agendamentos": 0, "vendas": 0,
-                "entregas_pendentes": 0, "pagamentos_pendentes": 0,
-                "total_vendido": 0.0, "total_recebido": 0.0,
-                "despesas": 0.0, "lucro": 0.0
-            },
-            "erro": ""
-        })
+        if evento_id:
+            cur.execute("""
+                SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
+                FROM tblEvento WHERE IDEvento=?
+            """, [evento_id])
+            r = cur.fetchone()
+            if r:
+                evento_info = {
+                    "id": access_int(r[0]),
+                    "nome": str(r[1] or ""),
+                    "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
+                    "cidade": str(r[3] or ""),
+                    "ativo": bool(r[4]) if r[4] is not None else False,
+                }
 
+                resumo["agendamentos"] = int(scalar(cur,
+                    "SELECT Count(*) FROM tblAgendamentos WHERE IDEvento=?", 0, [evento_id]) or 0)
+
+                cur.execute("""
+                    SELECT V.IDVenda, V.ValorFinal, V.Finalizado, V.StatusPagamento
+                    FROM tblVendaPacotes AS V WHERE V.IDEvento=?
+                """, [evento_id])
+                vendas_evento = cur.fetchall()
+                resumo["vendas"] = len(vendas_evento)
+                resumo["total_vendido"] = sum(float(r[1] or 0) for r in vendas_evento)
+                resumo["entregas_pendentes"] = sum(1 for r in vendas_evento if r[2] is None or not bool(r[2]))
+
+                pagamentos = {}
+                cur.execute("""
+                    SELECT P.IDVenda, Sum(P.ValorPago)
+                    FROM tblPagamento AS P
+                    INNER JOIN tblVendaPacotes AS V ON P.IDVenda=V.IDVenda
+                    WHERE V.IDEvento=? GROUP BY P.IDVenda
+                """, [evento_id])
+                for r in cur.fetchall():
+                    pagamentos[access_int(r[0])] = float(r[1] or 0)
+
+                recebido = 0.0
+                pendentes = 0
+                for r in vendas_evento:
+                    venda_id = access_int(r[0])
+                    valor = float(r[1] or 0)
+                    status_pg = str(r[3] or "aberto").strip().lower()
+                    pago = pagamentos.get(venda_id, 0.0)
+                    if status_pg == "cortesia":
+                        continue
+                    recebido += min(pago, valor) if valor > 0 else 0.0
+                    if pago < valor - 0.009:
+                        pendentes += 1
+                resumo["total_recebido"] = recebido
+                resumo["pagamentos_pendentes"] = pendentes
+
+                try:
+                    resumo["despesas"] = money(scalar(cur,
+                        "SELECT Sum(ValorDespesa) FROM tblDespesasEvento WHERE IDEvento=?",
+                        0, [evento_id]))
+                except Exception:
+                    resumo["despesas"] = 0.0
+                resumo["lucro"] = resumo["total_recebido"] - resumo["despesas"]
+
+        return jsonify({"ok": True, "eventos": eventos, "evento": evento_info, "resumo": resumo})
     except Exception as e:
-        if conn is not None:
-            try: conn.rollback()
-            except Exception: pass
-        print(f"[SGFE-API] EVENTO-GERAL V1 ERRO: {e}", flush=True)
-        return jsonify({"ok": False, "eventos": [], "evento": None, "resumo": {}, "erro": str(e)}), 500
-
+        return jsonify({"ok": False, "erro": str(e)}), 500
     finally:
-        if conn is not None:
-            try: conn.close()
-            except Exception: pass
+        if conn:
+            conn.close()
+
 
 @app.route("/api/dashboard")
 def dashboard():
@@ -2316,16 +2356,24 @@ def web_atletas():
         sql += " ORDER BY C.Nome"
 
         cur.execute(sql, params)
-        columns=[d[0] for d in cur.description]
+        # PostgreSQL devolve nomes de colunas/aliases não-quotados em minúsculo.
+        # O template do SGFE usa os nomes legados do Access (IDCliente, Atleta,
+        # Equipe, etc.). Mantemos exatamente esses nomes no dicionário enviado
+        # ao template para que os 53 registros sejam exibidos corretamente.
+        colunas_template = [
+            "IDCliente", "Atleta", "Sexo", "AnoNascimento", "Equipe",
+            "Modalidade", "Telefone", "Contato", "Cidade", "Estado"
+        ]
         data=[]
         for row in cur.fetchall():
             item={}
-            for col,value in zip(columns,row):
+            for pos, col_template in enumerate(colunas_template):
+                value = row[pos] if pos < len(row) else ""
                 if value is None:
                     value=""
                 else:
                     value=str(value)
-                item[col]=value
+                item[col_template]=value
             data.append(item)
     finally:
         conn.close()
