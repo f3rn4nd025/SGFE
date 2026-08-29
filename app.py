@@ -2827,15 +2827,23 @@ def gerenciar_balizamento_evento(evento_id):
 
             # Substituição segura: apaga apenas o balizamento estruturado anterior do evento.
             cur.execute("DELETE FROM tblBalizamentoProvas WHERE IDEvento=?", [evento_id])
+
+            # PostgreSQL migrado: a coluna IDBalizamento pode ter vindo do Access
+            # como NOT NULL, mas sem DEFAULT/sequence. No Access o AUTOINCREMENT
+            # preenchia esse campo sozinho. Aqui geramos os IDs explicitamente.
+            cur.execute("SELECT COALESCE(MAX(IDBalizamento::bigint), 0) FROM tblBalizamentoProvas")
+            proximo_id = int(cur.fetchone()[0] or 0) + 1
+
             for item in registros:
                 cur.execute("""
                     INSERT INTO tblBalizamentoProvas
-                    (IDEvento, NumeroProva, NomeProva, NumeroSerie, Raia, NomeAtleta, Registro, Pagina)
-                    VALUES (?,?,?,?,?,?,?,?)
+                    (IDBalizamento, IDEvento, NumeroProva, NomeProva, NumeroSerie, Raia, NomeAtleta, Registro, Pagina)
+                    VALUES (?,?,?,?,?,?,?,?,?)
                 """, [
-                    evento_id, item["prova"], item["nome_prova"], item["serie"],
+                    proximo_id, evento_id, item["prova"], item["nome_prova"], item["serie"],
                     item["raia"], item["nome_atleta"], item["registro"], item["pagina"]
                 ])
+                proximo_id += 1
 
             antigo = evento[4] or ""
             antigo_caminho = ""
