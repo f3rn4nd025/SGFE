@@ -13,6 +13,10 @@
 .back{color:#12d8de;text-decoration:none;font-weight:800}.result{margin-bottom:16px;padding:12px;border-radius:8px;background:#09251f;border:1px solid #116e59;color:#8ff1d5}.error{margin-bottom:16px;padding:12px;border-radius:8px;background:#311414;border:1px solid #8d3434;color:#ffb0b0}
 .warning{margin-bottom:16px;padding:12px;border-radius:8px;background:#30240c;border:1px solid #9b7a24;color:#ffe39a;font-weight:700}
 </style>
+
+<style id="sgfe-menu-logout-style">
+.sgfe-menu-logout{margin-top:12px !important;border-top:1px solid rgba(24,216,222,.16);padding-top:12px !important;}
+</style>
 </head>
 <body><div class="shell">
 <header class="topbar"><div class="brand"><div class="brand-mark"><img src="{{ url_for('static', filename='img/logo_fg.png') }}" alt="FG Fotos Esportivas"></div></div><div class="sgfe-head"><div class="sgfe-title">SGFE WEB</div><div class="sgfe-subtitle">SISTEMA DE GESTÃO FG FOTOS ESPORTIVAS</div></div><div class="event-box"><span>VENDA</span><strong>EDITAR OS</strong><small>Regra de preço do SGFE</small></div></header>
@@ -20,7 +24,7 @@
 <a class="menu" href="/"><b>⌂</b> Painel</a><a class="menu" href="/atletas"><b>♙</b> Atletas</a><a class="menu" href="/agendamentos"><b>◫</b> Agendamentos</a>
 <a class="menu active" href="/vendas"><b>◎</b> Vendas / Pacotes</a><a class="menu" href="/entregas"><b>✓</b> Entregas</a>
 <a class="menu" href="/pagamentos"><b>$</b> Pagamentos</a><a class="menu" href="/historico"><b>▤</b> Histórico</a><a class="menu" href="/configuracoes"><b>⚙</b> Configurações</a>
-</aside><main class="main"><div class="page-actions"><a class="nav-btn" href="/">⌂ MENU PRINCIPAL</a><a class="nav-btn back-btn" href="#" onclick="history.back(); return false;">← VOLTAR</a></div>
+<a class="menu sgfe-menu-logout" href="/logout" aria-label="Sair do sistema"><b>↪</b> SAIR</a></aside><main class="main"><div class="page-actions"><a class="nav-btn" href="/">⌂ MENU PRINCIPAL</a><a class="nav-btn back-btn" href="#" onclick="history.back(); return false;">← VOLTAR</a></div>
 
 <a class="back" href="/vendas">← Voltar para Vendas / Pacotes</a><h1>Editar Venda / OS #{{ venda[0] }}</h1><p>Altere o pacote, desconto, status ou observações. O valor é recalculado pela <b>tblPrecoEvento</b>.</p>
 <div class="form-card">

@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: sgfe
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app_online_teste:app
+    envVars:
+      - key: SGFE_DB_MODE
+        value: sqlite
+      - key: SGFE_DATA_DIR
+        value: /var/data
+      - key: SGFE_SECRET_KEY
+        sync: false
+      - key: SGFE_ADMIN_LOGIN
+        sync: false
+      - key: SGFE_ADMIN_PASSWORD
+        sync: false

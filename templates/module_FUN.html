@@ -230,46 +230,6 @@
     padding-right: 5px !important;
 }
 
-
-/* AGENDAMENTOS: enquadrar os botões sem alterar tamanhos */
-.module-table.agendamentos-table {
-    width: 100% !important;
-    min-width: 0 !important;
-    table-layout: fixed !important;
-}
-.module-table.agendamentos-table th,
-.module-table.agendamentos-table td {
-    box-sizing: border-box !important;
-    padding-left: 3px !important;
-    padding-right: 3px !important;
-    white-space: nowrap !important;
-}
-.module-table.agendamentos-table th:nth-child(1),
-.module-table.agendamentos-table td:nth-child(1) { width: 5% !important; }
-.module-table.agendamentos-table th:nth-child(2),
-.module-table.agendamentos-table td:nth-child(2) { width: 17% !important; }
-.module-table.agendamentos-table th:nth-child(3),
-.module-table.agendamentos-table td:nth-child(3) { width: 14% !important; }
-.module-table.agendamentos-table th:nth-child(4),
-.module-table.agendamentos-table td:nth-child(4) { width: 14% !important; }
-.module-table.agendamentos-table th:nth-child(5),
-.module-table.agendamentos-table td:nth-child(5) { width: 10% !important; }
-.module-table.agendamentos-table th:nth-child(6),
-.module-table.agendamentos-table td:nth-child(6) { width: 8% !important; }
-.module-table.agendamentos-table th:nth-child(7),
-.module-table.agendamentos-table td:nth-child(7) { width: 9% !important; }
-.module-table.agendamentos-table th:nth-child(8),
-.module-table.agendamentos-table td:nth-child(8) { width: 8% !important; }
-.module-table.agendamentos-table th:nth-child(9),
-.module-table.agendamentos-table td:nth-child(9) { width: 15% !important; }
-
-.module-table.agendamentos-table td.row-actions {
-    overflow: visible !important;
-    white-space: nowrap !important;
-    padding-left: 2px !important;
-    padding-right: 2px !important;
-}
-
 </style>
 
 <style id="sgfe-menu-logout-style">
@@ -333,7 +293,7 @@
 <div class="module-card">
   <div class="count">{{ data|length }} registro(s) encontrado(s)</div>
   <div class="table-wrap">
-  <table class="module-table {% if page == 'atletas' %}atletas-table{% endif %}{% if page == 'agendamentos' %} agendamentos-table{% endif %} athletes-table">
+  <table class="module-table {% if page == 'atletas' %}atletas-table{% endif %} athletes-table">
     <thead><tr>{% for c in columns %}{% if not (page == 'atletas' and c in ['Sexo','Estado','Modalidade']) %}<th>{% if page == 'atletas' and c == 'IDCliente' %}ID{% elif page == 'atletas' and c == 'AnoNascimento' %}CATEGORIA{% else %}{{ c }}{% endif %}</th>{% endif %}{% endfor %}{% if page in ['agendamentos', 'atletas', 'eventos'] %}<th>AÇÃO</th>{% endif %}</tr></thead>
     <tbody>
     {% for r in data %}

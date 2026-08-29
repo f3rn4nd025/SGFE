@@ -14,11 +14,15 @@
 @media(max-width:1050px){.pay-filters{grid-template-columns:1fr 1fr}.pay-summary{grid-template-columns:1fr 1fr}.pay-table{min-width:900px}.pay-panel{overflow:auto}}
 @media(max-width:650px){.pay-filters{grid-template-columns:1fr}.pay-summary{grid-template-columns:1fr}.pay-head{align-items:flex-start}}
 </style>
+
+<style id="sgfe-menu-logout-style">
+.sgfe-menu-logout{margin-top:12px !important;border-top:1px solid rgba(24,216,222,.16);padding-top:12px !important;}
+</style>
 </head>
 <body>
 <div class="shell">
 <header class="topbar"><div class="brand"><div class="brand-mark"><img src="{{ url_for('static', filename='img/logo_fg.png') }}" alt="Fernando Souza - Fotografia Esportiva"></div></div><div class="sgfe-head"><div class="sgfe-title">SGFE WEB</div><div class="sgfe-subtitle">SISTEMA DE GESTÃO FG FOTOS ESPORTIVAS</div></div><div class="event-box"><span>SGFE</span><strong>Pagamentos</strong><small>Banco Access conectado</small></div></header>
-<div class="layout"><aside class="sidebar"><a class="menu" href="/"><b>⌂</b> Painel</a><a class="menu" href="/atletas"><b>♙</b> Atletas</a><a class="menu" href="/agendamentos"><b>◫</b> Agendamentos</a><a class="menu" href="/vendas"><b>◎</b> Vendas / Pacotes</a><a class="menu" href="/entregas"><b>✓</b> Entregas</a><a class="menu active" href="/pagamentos"><b>$</b> Pagamentos</a><a class="menu" href="/historico"><b>▤</b> Histórico</a><a class="menu" href="/configuracoes"><b>⚙</b> Configurações</a></aside>
+<div class="layout"><aside class="sidebar"><a class="menu" href="/"><b>⌂</b> Painel</a><a class="menu" href="/atletas"><b>♙</b> Atletas</a><a class="menu" href="/agendamentos"><b>◫</b> Agendamentos</a><a class="menu" href="/vendas"><b>◎</b> Vendas / Pacotes</a><a class="menu" href="/entregas"><b>✓</b> Entregas</a><a class="menu active" href="/pagamentos"><b>$</b> Pagamentos</a><a class="menu" href="/historico"><b>▤</b> Histórico</a><a class="menu" href="/configuracoes"><b>⚙</b> Configurações</a><a class="menu sgfe-menu-logout" href="/logout" aria-label="Sair do sistema"><b>↪</b> SAIR</a></aside>
 <main class="main">
 <div class="page-actions"><a class="nav-btn" href="/">⌂ MENU PRINCIPAL</a><a class="nav-btn back-btn" href="#" onclick="history.back(); return false;">← VOLTAR</a></div>
 <div class="pay-head"><div><a class="back" href="/">← Painel</a><h1>Pagamentos</h1><p class="muted">Controle financeiro do evento: o que foi pago e o que ainda está em aberto.</p></div></div>

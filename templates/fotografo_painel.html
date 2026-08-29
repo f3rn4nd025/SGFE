@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SGFE | Gestão de Fotos Esportivas</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#050809;color:#fff;font-family:Arial,Helvetica,sans-serif}
+.topbar{min-height:118px;background:#030607;border-bottom:1px solid #123f41;display:flex;align-items:center;justify-content:center;padding:20px 28px;position:relative}
+.brand{text-align:center;line-height:1}
+.brand h1{margin:0;font-size:58px;font-weight:900;letter-spacing:1px}
+.brand p{margin:10px 0 0;color:#18d8de;font-size:18px;font-weight:700;letter-spacing:1.2px}
+.logout{position:absolute;right:28px;top:25px;text-decoration:none;background:#159451;border:1px solid #27d873;color:#fff;padding:12px 20px;border-radius:9px;font-weight:900;font-size:14px}
+.logout:hover{background:#20bb68}
+.wrap{max-width:1200px;margin:42px auto;padding:24px}
+.card{background:#071011;border:1px solid #123f41;border-radius:14px;padding:30px;box-shadow:0 14px 35px #0006}
+.card h2{margin:0 0 10px;font-size:30px}
+.card p{color:#819596;font-size:17px}
+a.link{color:#18d8de;text-decoration:none;font-weight:700}
+@media(max-width:650px){.topbar{min-height:130px;padding:25px 15px}.brand h1{font-size:45px}.brand p{font-size:14px}.logout{right:12px;top:12px;padding:9px 13px}.wrap{margin-top:25px;padding:15px}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1>SGFE</h1>
+    <p>GESTÃO DE FOTOS ESPORTIVAS</p>
+  </div>
+  <a class="logout" href="/logout">↪ SAIR</a>
+</header>
+<div class="wrap">
+  <div class="card">
+    <h2>Olá, {{ nome }}</h2>
+    <p>Seu painel está liberado.</p>
+    <a class="link" href="/">ENTRAR NO SGFE</a>
+  </div>
+</div>
+</body>
+</html>
