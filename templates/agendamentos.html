@@ -15,28 +15,9 @@ input,select,textarea{width:100%;box-sizing:border-box;background:#050b0c;color:
 button{cursor:pointer}.btn{background:#0b5b5e;border:1px solid #12d8de;color:#fff;border-radius:7px;padding:11px 16px;font-weight:900}
 .grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:12px}.full{grid-column:1/-1}
 .new-card{border-left:3px solid #12d8de}
-.table-wrap{overflow-x:auto;overflow-y:hidden;border:1px solid #123638;border-radius:9px}
-.table{width:100%;min-width:1700px;border-collapse:collapse;table-layout:fixed}
-.table th,.table td{white-space:nowrap;padding:10px 9px;vertical-align:middle}
-.table th{font-size:11px;text-align:left}
-.table td{font-size:12px;overflow:hidden;text-overflow:ellipsis}
-.table th:nth-child(1){width:95px}
-.table th:nth-child(2){width:105px}
-.table th:nth-child(3){width:220px}
-.table th:nth-child(4){width:300px}
-.table th:nth-child(5){width:120px}
-.table th:nth-child(6){width:130px}
-.table th:nth-child(7){width:120px}
-.table th:nth-child(8){width:230px}
-.table th:nth-child(9){width:145px}
-.table th:nth-child(10){width:430px}
-.table td:nth-child(10){overflow:visible}
-.row-actions{display:flex;align-items:center;gap:7px;flex-wrap:nowrap;white-space:nowrap}
-.row-actions form{display:inline-flex;margin:0}
-.row-action{display:inline-flex;align-items:center;justify-content:center;min-height:34px;box-sizing:border-box;padding:7px 10px;border:1px solid #12d8de;border-radius:6px;color:#12d8de;background:transparent;text-decoration:none;font-weight:900;font-size:10px;white-space:nowrap}
-.row-action:hover{background:#0b4143;color:#fff}
-.whatsapp{border-color:#20d96b;color:#20d96b}.whatsapp:hover{background:#0b4425;color:#fff}
-.wa-disabled{opacity:.35;cursor:not-allowed;border-color:#526b6c;color:#526b6c}
+.table-wrap{overflow:auto;border:1px solid #123638;border-radius:9px}.table{width:100%;min-width:1250px}.table th,.table td{white-space:nowrap}.table td{font-size:12px}
+.row-action{display:inline-block;padding:6px 9px;border:1px solid #12d8de;border-radius:6px;color:#12d8de;text-decoration:none;font-weight:900;font-size:10px}.row-action:hover{background:#0b4143;color:#fff}
+.whatsapp{border-color:#20d96b;color:#20d96b}.whatsapp:hover{background:#0b4425;color:#fff}.wa-disabled{opacity:.35;cursor:not-allowed;border-color:#526b6c;color:#526b6c}
 .pill{padding:4px 8px;border:1px solid #27595b;border-radius:20px}.ok{background:#0b4b3d;border-color:#0c8f6f}
 .alert{padding:11px;border-radius:8px;margin-bottom:12px}.success{background:#09251f;border:1px solid #116e59}.error{background:#311414;border:1px solid #8d3434}
 .small{font-size:11px;color:#71898a}.search-combo input{margin-bottom:6px}.atleta-combo{position:relative}
@@ -83,6 +64,81 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 .main > .card{display:block;box-sizing:border-box;width:100%;min-width:0;}
 .main > .new-card{display:block;box-sizing:border-box;width:100%;}
 .main > .new-card > form.grid{display:grid;grid-template-columns:minmax(280px,1.4fr) minmax(280px,1fr) minmax(180px,1fr);width:100%;box-sizing:border-box;}
+
+/* AGENDAMENTOS: corrigir sobreposição e garantir a coluna AÇÃO.
+   Mantém o visual e os tamanhos dos botões. */
+.table-wrap.agendamentos-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+}
+.table.agendamentos-table {
+    width: 100% !important;
+    min-width: 1350px !important;
+    table-layout: fixed !important;
+}
+.table.agendamentos-table th,
+.table.agendamentos-table td {
+    box-sizing: border-box !important;
+    padding-left: 5px !important;
+    padding-right: 5px !important;
+    vertical-align: middle !important;
+}
+.table.agendamentos-table th:nth-child(1),
+.table.agendamentos-table td:nth-child(1) { width: 5%; }
+.table.agendamentos-table th:nth-child(2),
+.table.agendamentos-table td:nth-child(2) { width: 8%; }
+.table.agendamentos-table th:nth-child(3),
+.table.agendamentos-table td:nth-child(3) { width: 12%; }
+.table.agendamentos-table th:nth-child(4),
+.table.agendamentos-table td:nth-child(4) { width: 12%; }
+.table.agendamentos-table th:nth-child(5),
+.table.agendamentos-table td:nth-child(5) { width: 9%; }
+.table.agendamentos-table th:nth-child(6),
+.table.agendamentos-table td:nth-child(6) { width: 8%; }
+.table.agendamentos-table th:nth-child(7),
+.table.agendamentos-table td:nth-child(7) { width: 7%; }
+.table.agendamentos-table th:nth-child(8),
+.table.agendamentos-table td:nth-child(8) { width: 8%; }
+.table.agendamentos-table th:nth-child(9),
+.table.agendamentos-table td:nth-child(9) { width: 7%; }
+.table.agendamentos-table th:nth-child(10),
+.table.agendamentos-table td:nth-child(10) { width: 24%; }
+
+.table.agendamentos-table td:nth-child(3),
+.table.agendamentos-table td:nth-child(4),
+.table.agendamentos-table td:nth-child(8) {
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+}
+.table.agendamentos-table td:nth-child(9),
+.table.agendamentos-table td:nth-child(10) {
+    overflow: visible !important;
+    white-space: normal !important;
+}
+.table.agendamentos-table td:nth-child(9) .row-action {
+    margin-right: 3px;
+}
+.table.agendamentos-table td:nth-child(10) {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+}
+.table.agendamentos-table .acoes-agendamento {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 5px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+.table.agendamentos-table .acoes-agendamento .row-action {
+    margin: 0 !important;
+}
+
+</style>
+
+<style id="sgfe-menu-logout-style">
+.sgfe-menu-logout{margin-top:12px !important;border-top:1px solid rgba(24,216,222,.16);padding-top:12px !important;}
 </style>
 </head>
 <body>
@@ -110,7 +166,7 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 <a class="menu" href="/pagamentos"><b>$</b> Pagamentos</a>
 <a class="menu" href="/historico"><b>▤</b> Histórico</a>
 <a class="menu" href="/configuracoes"><b>⚙</b> Configurações</a>
-</aside>
+<a class="menu sgfe-menu-logout" href="/logout" aria-label="Sair do sistema"><b>↪</b> SAIR</a></aside>
 
 <main class="main"><div class="page-actions"><a class="nav-btn" href="/">⌂ MENU PRINCIPAL</a><a class="nav-btn back-btn" href="#" onclick="history.back(); return false;">← VOLTAR</a></div>
 
@@ -139,8 +195,11 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 <button type="button" class="btn" style="margin-top:6px" onclick="toggleNovoAtleta()">+ CADASTRAR ATLETA</button>
 </div>
 
+<div style="display:flex;align-items:flex-end">
+<button class="btn" type="submit" style="width:100%;height:42px">SALVAR AGENDAMENTO</button>
+</div>
+
 <div class="full"><label>Observações</label><textarea name="observacoes" rows="2" placeholder="Observações do agendamento..."></textarea></div>
-<div><button class="btn" type="submit">SALVAR AGENDAMENTO</button></div>
 </form>
 
 <div class="new-athlete" id="novoAtletaBox">
@@ -190,12 +249,15 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 
 <div class="card" style="border-left:3px solid #12d8de">
 <h3 style="margin-top:0">📎 BALIZAMENTO DO EVENTO</h3>
-<p class="small">Anexe aqui o PDF do balizamento. Ele fica vinculado ao evento e será usado automaticamente quando você clicar em <b>BALIZAMENTO</b> no atleta.</p>
 <form id="formBalizamento" method="post" enctype="multipart/form-data" onsubmit="return enviarBalizamento(event)">
-<div style="display:grid;grid-template-columns:1.4fr 1fr auto;gap:10px;align-items:end">
-<div><label>Evento</label><select id="balizamento_evento" required><option value="">SELECIONE O EVENTO...</option>{% for e in eventos %}<option value="{{ e.id }}">{{ e.nome }} — {{ e.data }}{% if e.cidade %} — {{ e.cidade }}{% endif %}</option>{% endfor %}</select></div>
+<div style="display:grid;grid-template-columns:1.2fr 1fr auto auto;gap:10px;align-items:end">
+<div><label>Evento</label><select id="balizamento_evento" required onchange="atualizarBotaoImpressaoBalizamento()"><option value="">SELECIONE O EVENTO...</option>{% for e in eventos %}<option value="{{ e.id }}">{{ e.nome }} — {{ e.data }}{% if e.cidade %} — {{ e.cidade }}{% endif %}</option>{% endfor %}</select></div>
 <div><label>Arquivo PDF</label><input id="balizamento_arquivo" name="balizamento" type="file" accept="application/pdf" required></div>
 <div><button class="btn" type="submit">📎 ANEXAR BALIZAMENTO</button></div>
+<div><button id="btnImprimirBalizamentoEvento" type="button" class="btn" style="border-color:#f5d547;color:#f5d547;white-space:nowrap" onclick="imprimirBalizamentoEvento()" disabled>🖨 IMPRIMIR BALIZAMENTO</button></div>
+</div>
+<div class="small" style="margin-top:10px">
+  Anexe aqui o PDF do balizamento. Ele fica vinculado ao evento e será usado automaticamente quando você clicar em <b>BALIZAMENTO</b> no atleta.
 </div>
 <div id="balizamento_upload_msg" class="small" style="margin-top:8px"></div>
 </form>
@@ -212,9 +274,9 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 </div>
 
 <div class="card">
-<div class="small" style="margin-bottom:10px">{{ data|length }} agendamento(s) encontrado(s)</div>
-<div class="table-wrap">
-<table class="table">
+
+<div class="table-wrap agendamentos-wrap">
+<table class="table agendamentos-table">
 <thead><tr>
 <th>AGENDAMENTO</th><th>DATA</th><th>ATLETA</th><th>EVENTO</th><th>DATA EVENTO</th><th>CIDADE</th><th>STATUS</th><th>OBSERVAÇÕES</th><th>AVISO</th><th>AÇÃO</th>
 </tr></thead>
@@ -232,18 +294,13 @@ href="https://wa.me/{{ r.Telefone|replace('(','')|replace(')','')|replace('-',''
 {% endif %}
 </td>
 <td>{% if r.IDAgendamento %}
-<div class="row-actions">
-{% if r.BalizamentoArquivo %}
-<a class="row-action" style="border-color:#f5d547;color:#f5d547" href="/agendamentos/{{ r.IDAgendamento }}/balizamento">🏊 BALIZAMENTO</a>
-{% else %}
-<a class="row-action" style="border-color:#7d9798;color:#7d9798" href="/eventos/{{ r.IDEvento }}/balizamento" title="Este evento ainda não possui balizamento anexado">📎 ANEXAR BALIZAMENTO</a>
-{% endif %}
+<div class="acoes-agendamento">
+{% if r.BalizamentoArquivo %}<a class="row-action" style="border-color:#f5d547;color:#f5d547" href="/agendamentos/{{ r.IDAgendamento }}/balizamento">🏊 BALIZAMENTO</a>{% else %}<a class="row-action" style="border-color:#7d9798;color:#7d9798" href="/eventos/{{ r.IDEvento }}/balizamento" title="Este evento ainda não possui balizamento anexado">📎 ANEXAR BALIZAMENTO</a>{% endif %}
 <a class="row-action" style="border-color:#12d8de;color:#12d8de" href="/agendamentos/{{ r.IDAgendamento }}/venda">💰 GERAR VENDA</a>
-<form method="post" action="/agendamentos/{{ r.IDAgendamento }}/excluir" onsubmit="return confirm('Excluir este agendamento? Esta ação não poderá ser desfeita.');">
+<form method="post" action="/agendamentos/{{ r.IDAgendamento }}/excluir" style="display:inline" onsubmit="return confirm('Excluir este agendamento? Esta ação não poderá ser desfeita.');">
 <button type="submit" class="row-action btn-danger">EXCLUIR</button>
 </form>
-</div>
-{% endif %}</td>
+</div>{% endif %}</td>
 </tr>
 {% else %}<tr><td colspan="10" class="empty">Nenhum agendamento encontrado com esses filtros.</td></tr>{% endfor %}
 </tbody></table>
@@ -412,6 +469,24 @@ async function cadastrarAtleta(){
    msg.textContent='Erro ao cadastrar atleta: '+err;
  }
 }
+function atualizarBotaoImpressaoBalizamento(){
+  const sel=document.getElementById('balizamento_evento');
+  const btn=document.getElementById('btnImprimirBalizamentoEvento');
+  if(!sel || !btn) return;
+  btn.disabled=!sel.value;
+  btn.style.opacity=sel.value?'1':'0.45';
+  btn.title=sel.value?'Imprimir o balizamento completo deste evento, com as marcações':'Selecione um evento para imprimir o balizamento';
+}
+
+function imprimirBalizamentoEvento(){
+  const evento=document.getElementById('balizamento_evento').value;
+  if(!evento){
+    document.getElementById('balizamento_upload_msg').textContent='Selecione o evento para imprimir o balizamento.';
+    return;
+  }
+  window.open('/eventos/'+evento+'/balizamento/imprimir','_blank');
+}
+
 async function enviarBalizamento(e){
   e.preventDefault();
   const evento=document.getElementById('balizamento_evento').value;
