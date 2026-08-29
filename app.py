@@ -3344,11 +3344,11 @@ def web_agendamentos():
                 LEFT JOIN tblstatusagendamento sa
                   ON a.idstatusagendamento::text=sa.idstatusagendamento::text
                 LEFT JOIN tblsexos sx ON c.idsexo::text=sx.idsexo::text
-                WHERE (a.idvendas IS NULL OR a.idvendas=0)
+                WHERE (a.idvendas IS NULL OR a.idvendas::text='0')
                   AND NOT EXISTS (
                       SELECT 1
                       FROM tblvendapacotes v
-                      WHERE v.idagendamento=a.idagendamento
+                      WHERE v.idagendamento::text=a.idagendamento::text
                   )
                   AND (
                       sa.statusagendamento IS NULL
@@ -3372,14 +3372,14 @@ def web_agendamentos():
             if filtro_evento:
                 try:
                     params.append(int(filtro_evento))
-                    sql += " AND a.idevento=%s"
+                    sql += " AND a.idevento::text=%s::text"
                 except ValueError:
                     sql += " AND 1=0"
 
             if filtro_status:
                 try:
                     params.append(int(filtro_status))
-                    sql += " AND a.idstatusagendamento=%s"
+                    sql += " AND a.idstatusagendamento::text=%s::text"
                 except ValueError:
                     sql += " AND 1=0"
 
