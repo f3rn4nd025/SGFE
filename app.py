@@ -2015,32 +2015,13 @@ def logout():
 
 @app.route("/api/evento-geral")
 def api_evento_geral():
-    """
-    Painel do Evento:
-    - carrega a lista de eventos;
-    - identifica o evento selecionado;
-    - somente então calcula os indicadores desse evento.
-    """
+    """V1: busca somente os eventos para o Painel."""
     conn = None
-
-    resumo = {
-        "agendamentos": 0,
-        "vendas": 0,
-        "entregas_pendentes": 0,
-        "pagamentos_pendentes": 0,
-        "total_vendido": 0.0,
-        "total_recebido": 0.0,
-        "despesas": 0.0,
-        "lucro": 0.0,
-    }
-
     try:
         conn = get_connection()
         cur = conn.cursor()
+        print("[SGFE-API] EVENTO-GERAL V1 - BUSCANDO SOMENTE EVENTOS", flush=True)
 
-        print("[SGFE-API] EVENTO-GERAL V2 - LISTANDO EVENTOS", flush=True)
-
-        # 1) LISTA DE EVENTOS
         cur.execute("""
             SELECT idevento, nomeevento, dataevento, cidade
             FROM public.tblevento
@@ -2062,182 +2043,34 @@ def api_evento_geral():
                 "nome": str(row[1] or ""),
                 "data": data_evento,
                 "cidade": str(row[3] or ""),
-                "ativo": True,
             })
 
-        # 2) EVENTO SELECIONADO
-        evento_raw = request.args.get("evento", "").strip()
-        evento_id = access_int(evento_raw) if evento_raw else (
-            eventos[0]["id"] if eventos else 0
-        )
-
-        evento_info = None
-
-        if evento_id:
-            cur.execute("""
-                SELECT idevento, nomeevento, dataevento, cidade
-                FROM public.tblevento
-                WHERE idevento=?
-            """, [evento_id])
-
-            row = cur.fetchone()
-
-            if row:
-                data_evento = row[2]
-                if hasattr(data_evento, "strftime"):
-                    data_evento = data_evento.strftime("%d/%m/%Y")
-                elif data_evento is None:
-                    data_evento = ""
-                else:
-                    data_evento = str(data_evento)
-
-                evento_info = {
-                    "id": access_int(row[0]),
-                    "nome": str(row[1] or ""),
-                    "data": data_evento,
-                    "cidade": str(row[3] or ""),
-                    "ativo": True,
-                }
-
-                # Função local: se um indicador tiver algum campo diferente
-                # na migração, ele não derruba os demais indicadores.
-                def indicador(sql, params=None, default=0):
-                    try:
-                        cur.execute(sql, params or [])
-                        r = cur.fetchone()
-                        return r[0] if r and r[0] is not None else default
-                    except Exception as exc:
-                        try:
-                            conn.rollback()
-                        except Exception:
-                            pass
-                        print(f"[SGFE-API] indicador ignorado: {exc}", flush=True)
-                        return default
-
-                # 3) AGENDAMENTOS
-                resumo["agendamentos"] = int(indicador(
-                    "SELECT COUNT(*) FROM public.tblagendamentos WHERE idevento=?",
-                    [evento_id], 0
-                ) or 0)
-
-                # 4) VENDAS DO EVENTO
-                try:
-                    cur.execute("""
-                        SELECT idvenda, valorfinal, finalizado, statuspagamento
-                        FROM public.tblvendapacotes
-                        WHERE idevento=?
-                    """, [evento_id])
-                    vendas_evento = cur.fetchall()
-                except Exception as exc:
-                    try:
-                        conn.rollback()
-                    except Exception:
-                        pass
-                    print(f"[SGFE-API] vendas ignoradas: {exc}", flush=True)
-                    vendas_evento = []
-
-                resumo["vendas"] = len(vendas_evento)
-                resumo["total_vendido"] = sum(
-                    float(r[1] or 0) for r in vendas_evento
-                )
-
-                # 5) PAGAMENTOS EFETIVAMENTE REGISTRADOS
-                pagamentos = {}
-                try:
-                    cur.execute("""
-                        SELECT p.idvenda, SUM(p.valorpago)
-                        FROM public.tblpagamento AS p
-                        INNER JOIN public.tblvendapacotes AS v
-                            ON p.idvenda=v.idvenda
-                        WHERE v.idevento=?
-                        GROUP BY p.idvenda
-                    """, [evento_id])
-
-                    for r in cur.fetchall():
-                        pagamentos[access_int(r[0])] = float(r[1] or 0)
-
-                except Exception as exc:
-                    try:
-                        conn.rollback()
-                    except Exception:
-                        pass
-                    print(f"[SGFE-API] pagamentos ignorados: {exc}", flush=True)
-
-                # 6) ENTREGAS E PAGAMENTOS PENDENTES
-                recebido = 0.0
-                entregas_pendentes = 0
-                pagamentos_pendentes = 0
-
-                for r in vendas_evento:
-                    venda_id = access_int(r[0])
-                    valor = float(r[1] or 0)
-                    finalizado = bool(r[2]) if r[2] is not None else False
-                    status_pg = str(r[3] or "aberto").strip().lower()
-
-                    if not finalizado:
-                        entregas_pendentes += 1
-
-                    if status_pg == "cortesia":
-                        continue
-
-                    pago = pagamentos.get(venda_id, 0.0)
-                    recebido += min(pago, valor) if valor > 0 else 0.0
-
-                    if pago < valor - 0.009:
-                        pagamentos_pendentes += 1
-
-                resumo["entregas_pendentes"] = entregas_pendentes
-                resumo["pagamentos_pendentes"] = pagamentos_pendentes
-                resumo["total_recebido"] = recebido
-
-                # 7) DESPESAS DO EVENTO
-                resumo["despesas"] = float(indicador(
-                    "SELECT SUM(valordespesa) "
-                    "FROM public.tbldespesasevento WHERE idevento=?",
-                    [evento_id], 0
-                ) or 0)
-
-                resumo["lucro"] = (
-                    resumo["total_recebido"] - resumo["despesas"]
-                )
-
-        print(
-            f"[SGFE-API] EVENTO-GERAL V2 - eventos={len(eventos)} "
-            f"selecionado={evento_id}",
-            flush=True
-        )
+        print(f"[SGFE-API] EVENTO-GERAL V1 - {len(eventos)} EVENTOS ENCONTRADOS", flush=True)
 
         return jsonify({
             "ok": True,
             "eventos": eventos,
-            "evento": evento_info,
-            "resumo": resumo,
-            "erro": "",
+            "evento": None,
+            "resumo": {
+                "agendamentos": 0, "vendas": 0,
+                "entregas_pendentes": 0, "pagamentos_pendentes": 0,
+                "total_vendido": 0.0, "total_recebido": 0.0,
+                "despesas": 0.0, "lucro": 0.0
+            },
+            "erro": ""
         })
 
     except Exception as e:
         if conn is not None:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-
-        print(f"[SGFE-API] EVENTO-GERAL V2 ERRO: {e}", flush=True)
-
-        return jsonify({
-            "ok": False,
-            "eventos": [],
-            "evento": None,
-            "resumo": resumo,
-            "erro": str(e),
-        }), 500
+            try: conn.rollback()
+            except Exception: pass
+        print(f"[SGFE-API] EVENTO-GERAL V1 ERRO: {e}", flush=True)
+        return jsonify({"ok": False, "eventos": [], "evento": None, "resumo": {}, "erro": str(e)}), 500
 
     finally:
         if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
+            try: conn.close()
+            except Exception: pass
 
 @app.route("/api/dashboard")
 def dashboard():
