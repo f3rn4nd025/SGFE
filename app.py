@@ -4238,9 +4238,9 @@ def web_vendas():
             V.Finalizado,
             V.DataFinalizacao
         FROM (((tblVendaPacotes AS V
-        LEFT JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
-        LEFT JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
-        LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda)
+        LEFT JOIN tblClientes AS C ON CAST(V.IDCliente AS TEXT)=CAST(C.IDCliente AS TEXT))
+        LEFT JOIN tblEvento AS E ON CAST(V.IDEvento AS TEXT)=CAST(E.IDEvento AS TEXT))
+        LEFT JOIN tblStatusVenda AS S ON CAST(V.IDStatusVenda AS TEXT)=CAST(S.IDStatusVenda AS TEXT))
         """
 
         where = []
