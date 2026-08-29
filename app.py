@@ -638,25 +638,12 @@ class PostgreSQLCompatCursor:
         return iter(self._cursor)
 
     def execute(self, sql, params=None):
-        original_sql = sql
-        converted_sql = _postgres_sql(sql)
-        try:
-            if params is None:
-                self._cursor.execute(converted_sql)
-            else:
-                self._cursor.execute(converted_sql, params)
-            return self
-        except Exception as exc:
-            print("[SGFE-SQL-ERRO]", flush=True)
-            print(f"[SGFE-SQL-ERRO] original={original_sql!r}", flush=True)
-            print(f"[SGFE-SQL-ERRO] convertido={converted_sql!r}", flush=True)
-            print(f"[SGFE-SQL-ERRO] parametros={params!r}", flush=True)
-            print(f"[SGFE-SQL-ERRO] erro={exc}", flush=True)
-            try:
-                self._cursor.connection.rollback()
-            except Exception:
-                pass
-            raise
+        sql = _postgres_sql(sql)
+        if params is None:
+            self._cursor.execute(sql)
+        else:
+            self._cursor.execute(sql, params)
+        return self
 
     def executemany(self, sql, seq_of_params):
         self._cursor.executemany(_postgres_sql(sql), seq_of_params)
@@ -746,16 +733,10 @@ def _postgres_sql(sql):
     s = re.sub(r"SELECT\s+@@IDENTITY", "SELECT LASTVAL()", s, flags=re.I)
 
     # Access SELECT TOP n -> PostgreSQL LIMIT n.
-    # Também cobre SELECT DISTINCT TOP n.
-    m = re.search(
-        r"\bSELECT\s+(DISTINCT\s+)?TOP\s+(\d+)\s+",
-        s,
-        flags=re.I | re.S
-    )
+    m = re.search(r"\bSELECT\s+TOP\s+(\d+)\s+", s, flags=re.I | re.S)
     if m:
-        distinct = m.group(1) or ""
-        n = m.group(2)
-        s = s[:m.start()] + "SELECT " + distinct + s[m.end():]
+        n = m.group(1)
+        s = s[:m.start()] + re.sub(r"\bSELECT\s+TOP\s+\d+\s+", "SELECT ", s[m.start():], count=1, flags=re.I)
         semi = ";" if s.rstrip().endswith(";") else ""
         core = s.rstrip(";").rstrip()
         core += f" LIMIT {n}"
@@ -1342,7 +1323,7 @@ def get_connection():
 
 
 def scalar(cursor, sql, default=0, params=None):
-    """Executa uma consulta escalar sem contaminar a transação em caso de erro."""
+    """Executa uma consulta escalar, aceitando parâmetros opcionais."""
     try:
         if params is None:
             cursor.execute(sql)
@@ -1352,21 +1333,7 @@ def scalar(cursor, sql, default=0, params=None):
         if not row or row[0] is None:
             return default
         return row[0]
-    except Exception as exc:
-        # PostgreSQL aborta a transação quando uma consulta falha.
-        # Sem rollback, a próxima consulta recebe apenas:
-        # "current transaction is aborted".
-        try:
-            raw = getattr(cursor, "_cursor", None)
-            conn = getattr(raw, "connection", None)
-            if conn is not None:
-                conn.rollback()
-        except Exception:
-            pass
-        print("[SGFE-SCALAR-ERRO]", flush=True)
-        print(f"[SGFE-SCALAR-ERRO] sql={sql!r}", flush=True)
-        print(f"[SGFE-SCALAR-ERRO] params={params!r}", flush=True)
-        print(f"[SGFE-SCALAR-ERRO] erro={exc}", flush=True)
+    except Exception:
         return default
 
 
@@ -2048,102 +2015,229 @@ def logout():
 
 @app.route("/api/evento-geral")
 def api_evento_geral():
-    """Retorna os indicadores do evento para o painel inicial."""
+    """
+    Painel do Evento:
+    - carrega a lista de eventos;
+    - identifica o evento selecionado;
+    - somente então calcula os indicadores desse evento.
+    """
     conn = None
+
+    resumo = {
+        "agendamentos": 0,
+        "vendas": 0,
+        "entregas_pendentes": 0,
+        "pagamentos_pendentes": 0,
+        "total_vendido": 0.0,
+        "total_recebido": 0.0,
+        "despesas": 0.0,
+        "lucro": 0.0,
+    }
+
     try:
         conn = get_connection()
         cur = conn.cursor()
-        eventos = []
+
+        print("[SGFE-API] EVENTO-GERAL V2 - LISTANDO EVENTOS", flush=True)
+
+        # 1) LISTA DE EVENTOS
         cur.execute("""
-            SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
-            FROM tblEvento
-            ORDER BY DataEvento DESC, NomeEvento
+            SELECT idevento, nomeevento, dataevento, cidade
+            FROM public.tblevento
+            ORDER BY dataevento DESC, nomeevento
         """)
-        for r in cur.fetchall():
+
+        eventos = []
+        for row in cur.fetchall():
+            data_evento = row[2]
+            if hasattr(data_evento, "strftime"):
+                data_evento = data_evento.strftime("%d/%m/%Y")
+            elif data_evento is None:
+                data_evento = ""
+            else:
+                data_evento = str(data_evento)
+
             eventos.append({
-                "id": access_int(r[0]),
-                "nome": str(r[1] or ""),
-                "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
-                "cidade": str(r[3] or ""),
-                "ativo": bool(r[4]) if r[4] is not None else False,
+                "id": access_int(row[0]),
+                "nome": str(row[1] or ""),
+                "data": data_evento,
+                "cidade": str(row[3] or ""),
+                "ativo": True,
             })
 
-        evento_id_raw = request.args.get("evento", "").strip()
-        evento_id = access_int(evento_id_raw) if evento_id_raw else (eventos[0]["id"] if eventos else 0)
-        resumo = {
-            "agendamentos": 0, "vendas": 0, "entregas_pendentes": 0,
-            "pagamentos_pendentes": 0, "total_vendido": 0.0,
-            "total_recebido": 0.0, "despesas": 0.0, "lucro": 0.0
-        }
+        # 2) EVENTO SELECIONADO
+        evento_raw = request.args.get("evento", "").strip()
+        evento_id = access_int(evento_raw) if evento_raw else (
+            eventos[0]["id"] if eventos else 0
+        )
+
         evento_info = None
 
         if evento_id:
             cur.execute("""
-                SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
-                FROM tblEvento WHERE IDEvento=?
+                SELECT idevento, nomeevento, dataevento, cidade
+                FROM public.tblevento
+                WHERE idevento=?
             """, [evento_id])
-            r = cur.fetchone()
-            if r:
+
+            row = cur.fetchone()
+
+            if row:
+                data_evento = row[2]
+                if hasattr(data_evento, "strftime"):
+                    data_evento = data_evento.strftime("%d/%m/%Y")
+                elif data_evento is None:
+                    data_evento = ""
+                else:
+                    data_evento = str(data_evento)
+
                 evento_info = {
-                    "id": access_int(r[0]),
-                    "nome": str(r[1] or ""),
-                    "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
-                    "cidade": str(r[3] or ""),
-                    "ativo": bool(r[4]) if r[4] is not None else False,
+                    "id": access_int(row[0]),
+                    "nome": str(row[1] or ""),
+                    "data": data_evento,
+                    "cidade": str(row[3] or ""),
+                    "ativo": True,
                 }
 
-                resumo["agendamentos"] = int(scalar(cur,
-                    "SELECT Count(*) FROM tblAgendamentos WHERE IDEvento=?", 0, [evento_id]) or 0)
+                # Função local: se um indicador tiver algum campo diferente
+                # na migração, ele não derruba os demais indicadores.
+                def indicador(sql, params=None, default=0):
+                    try:
+                        cur.execute(sql, params or [])
+                        r = cur.fetchone()
+                        return r[0] if r and r[0] is not None else default
+                    except Exception as exc:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+                        print(f"[SGFE-API] indicador ignorado: {exc}", flush=True)
+                        return default
 
-                cur.execute("""
-                    SELECT V.IDVenda, V.ValorFinal, V.Finalizado, V.StatusPagamento
-                    FROM tblVendaPacotes AS V WHERE V.IDEvento=?
-                """, [evento_id])
-                vendas_evento = cur.fetchall()
+                # 3) AGENDAMENTOS
+                resumo["agendamentos"] = int(indicador(
+                    "SELECT COUNT(*) FROM public.tblagendamentos WHERE idevento=?",
+                    [evento_id], 0
+                ) or 0)
+
+                # 4) VENDAS DO EVENTO
+                try:
+                    cur.execute("""
+                        SELECT idvenda, valorfinal, finalizado, statuspagamento
+                        FROM public.tblvendapacotes
+                        WHERE idevento=?
+                    """, [evento_id])
+                    vendas_evento = cur.fetchall()
+                except Exception as exc:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    print(f"[SGFE-API] vendas ignoradas: {exc}", flush=True)
+                    vendas_evento = []
+
                 resumo["vendas"] = len(vendas_evento)
-                resumo["total_vendido"] = sum(float(r[1] or 0) for r in vendas_evento)
-                resumo["entregas_pendentes"] = sum(1 for r in vendas_evento if r[2] is None or not bool(r[2]))
+                resumo["total_vendido"] = sum(
+                    float(r[1] or 0) for r in vendas_evento
+                )
 
+                # 5) PAGAMENTOS EFETIVAMENTE REGISTRADOS
                 pagamentos = {}
-                cur.execute("""
-                    SELECT P.IDVenda, Sum(P.ValorPago)
-                    FROM tblPagamento AS P
-                    INNER JOIN tblVendaPacotes AS V ON P.IDVenda=V.IDVenda
-                    WHERE V.IDEvento=? GROUP BY P.IDVenda
-                """, [evento_id])
-                for r in cur.fetchall():
-                    pagamentos[access_int(r[0])] = float(r[1] or 0)
+                try:
+                    cur.execute("""
+                        SELECT p.idvenda, SUM(p.valorpago)
+                        FROM public.tblpagamento AS p
+                        INNER JOIN public.tblvendapacotes AS v
+                            ON p.idvenda=v.idvenda
+                        WHERE v.idevento=?
+                        GROUP BY p.idvenda
+                    """, [evento_id])
 
+                    for r in cur.fetchall():
+                        pagamentos[access_int(r[0])] = float(r[1] or 0)
+
+                except Exception as exc:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    print(f"[SGFE-API] pagamentos ignorados: {exc}", flush=True)
+
+                # 6) ENTREGAS E PAGAMENTOS PENDENTES
                 recebido = 0.0
-                pendentes = 0
+                entregas_pendentes = 0
+                pagamentos_pendentes = 0
+
                 for r in vendas_evento:
                     venda_id = access_int(r[0])
                     valor = float(r[1] or 0)
+                    finalizado = bool(r[2]) if r[2] is not None else False
                     status_pg = str(r[3] or "aberto").strip().lower()
-                    pago = pagamentos.get(venda_id, 0.0)
+
+                    if not finalizado:
+                        entregas_pendentes += 1
+
                     if status_pg == "cortesia":
                         continue
+
+                    pago = pagamentos.get(venda_id, 0.0)
                     recebido += min(pago, valor) if valor > 0 else 0.0
+
                     if pago < valor - 0.009:
-                        pendentes += 1
+                        pagamentos_pendentes += 1
+
+                resumo["entregas_pendentes"] = entregas_pendentes
+                resumo["pagamentos_pendentes"] = pagamentos_pendentes
                 resumo["total_recebido"] = recebido
-                resumo["pagamentos_pendentes"] = pendentes
 
-                try:
-                    resumo["despesas"] = money(scalar(cur,
-                        "SELECT Sum(ValorDespesa) FROM tblDespesasEvento WHERE IDEvento=?",
-                        0, [evento_id]))
-                except Exception:
-                    resumo["despesas"] = 0.0
-                resumo["lucro"] = resumo["total_recebido"] - resumo["despesas"]
+                # 7) DESPESAS DO EVENTO
+                resumo["despesas"] = float(indicador(
+                    "SELECT SUM(valordespesa) "
+                    "FROM public.tbldespesasevento WHERE idevento=?",
+                    [evento_id], 0
+                ) or 0)
 
-        return jsonify({"ok": True, "eventos": eventos, "evento": evento_info, "resumo": resumo})
+                resumo["lucro"] = (
+                    resumo["total_recebido"] - resumo["despesas"]
+                )
+
+        print(
+            f"[SGFE-API] EVENTO-GERAL V2 - eventos={len(eventos)} "
+            f"selecionado={evento_id}",
+            flush=True
+        )
+
+        return jsonify({
+            "ok": True,
+            "eventos": eventos,
+            "evento": evento_info,
+            "resumo": resumo,
+            "erro": "",
+        })
+
     except Exception as e:
-        return jsonify({"ok": False, "erro": str(e)}), 500
-    finally:
-        if conn:
-            conn.close()
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
+        print(f"[SGFE-API] EVENTO-GERAL V2 ERRO: {e}", flush=True)
+
+        return jsonify({
+            "ok": False,
+            "eventos": [],
+            "evento": None,
+            "resumo": resumo,
+            "erro": str(e),
+        }), 500
+
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 @app.route("/api/dashboard")
 def dashboard():
