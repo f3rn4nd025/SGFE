@@ -997,6 +997,10 @@ def _ensure_status_pagamento(conn):
     try:
         cur.execute("SELECT TOP 1 StatusPagamento FROM tblVendaPacotes")
     except Exception:
+        # No PostgreSQL, uma consulta que falha aborta a transação atual.
+        # É necessário desfazê-la antes de tentar criar a coluna.
+        if _is_postgres():
+            conn.rollback()
         cur.execute("ALTER TABLE tblVendaPacotes ADD COLUMN StatusPagamento TEXT(20)")
         conn.commit()
 
