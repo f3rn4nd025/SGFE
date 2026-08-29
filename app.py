@@ -3208,48 +3208,85 @@ def imprimir_balizamento_evento(evento_id):
 
 @app.route("/agendamentos", methods=["GET", "POST"])
 def web_agendamentos():
+    """
+    AGENDAMENTOS SOMENTE.
+
+    V14 parte da V13.
+    NÃO altera o Painel e NÃO altera o menu Atletas.
+
+    A rota foi isolada da rotina de preparação do get_connection() no
+    PostgreSQL e passou a fazer as consultas do módulo em uma conexão
+    limpa. Isso elimina o erro "list index out of range" sem mexer nas
+    outras telas.
+    """
     mensagem = ""
     erro = ""
+    conn = None
 
-    conn = get_connection()
     try:
+        # ---------------------------------------------------------
+        # Conexão limpa SOMENTE para Agendamentos.
+        # Painel e Atletas continuam exatamente como estão na V13.
+        # ---------------------------------------------------------
+        if _is_postgres():
+            if session.get("perfil") == "FOTOGRAFO" and session.get("fotografo_id"):
+                schema = _tenant_db_path(session["fotografo_id"])
+            else:
+                schema = "public"
+            conn = PostgreSQLCompatConnection(DATABASE_URL, schema=schema)
+        else:
+            conn = get_connection()
+
         cur = conn.cursor()
 
-        # ==========================
+        # PostgreSQL: os IDs migrados podem ser varchar.
+        # Access/SQLite: continuam numéricos.
+        def id_param(value):
+            value = "" if value is None else str(value).strip()
+            if _is_postgres():
+                return value
+            return access_int(value or 0)
+
+        # =========================================================
         # NOVO AGENDAMENTO
-        # ==========================
+        # =========================================================
         if request.method == "POST":
-            id_cliente = access_int(request.form.get("id_cliente") or 0)
-            id_evento = access_int(request.form.get("id_evento") or 0)
-            # O status de um novo agendamento é sempre AGENDADO.
-            cur.execute("SELECT TOP 1 IDStatusAgendamento FROM tblStatusAgendamento WHERE UCASE(StatusAgendamento)='AGENDADO'")
-            status_row = cur.fetchone()
-            if not status_row:
-                raise ValueError("O status AGENDADO não foi encontrado no SGFE.")
-            id_status = access_int(status_row[0])
+            id_cliente_raw = request.form.get("id_cliente", "").strip()
+            id_evento_raw = request.form.get("id_evento", "").strip()
             observacoes = request.form.get("observacoes") or ""
 
-            if not id_cliente:
+            if not id_cliente_raw:
                 raise ValueError("Selecione um atleta.")
-            if not id_evento:
+            if not id_evento_raw:
                 raise ValueError("Selecione um evento.")
-            if not id_status:
-                raise ValueError("Selecione o status do agendamento.")
 
-            # Regra fundamental: o mesmo atleta não pode ser agendado
-            # duas vezes para o mesmo evento enquanto o agendamento anterior
-            # não estiver cancelado.
+            id_cliente = id_param(id_cliente_raw)
+            id_evento = id_param(id_evento_raw)
+
+            cur.execute("""
+                SELECT IDStatusAgendamento
+                FROM tblStatusAgendamento
+                WHERE UPPER(StatusAgendamento)='AGENDADO'
+                ORDER BY IDStatusAgendamento
+                LIMIT 1
+            """)
+            status_row = cur.fetchone()
+
+            if not status_row:
+                raise ValueError("O status AGENDADO não foi encontrado no SGFE.")
+
+            id_status = id_param(status_row[0])
+
             cur.execute("""
                 SELECT A.IDAgendamento, S.StatusAgendamento
                 FROM tblAgendamentos AS A
                 LEFT JOIN tblStatusAgendamento AS S
-                  ON A.IDStatusAgendamento=S.IDStatusAgendamento
-                WHERE A.IDCliente=? AND A.IDEvento=?
+                    ON A.IDStatusAgendamento=S.IDStatusAgendamento
+                WHERE A.IDCliente=%s AND A.IDEvento=%s
                 ORDER BY A.IDAgendamento DESC
             """, [id_cliente, id_evento])
 
-            existentes = cur.fetchall()
-            for ex in existentes:
+            for ex in cur.fetchall():
                 status_antigo = str(ex[1] or "").upper()
                 if "CANCEL" not in status_antigo:
                     raise ValueError(
@@ -3261,21 +3298,32 @@ def web_agendamentos():
                 INSERT INTO tblAgendamentos
                 (DataAgendamento, IDCliente, IDEvento,
                  IDStatusAgendamento, Observacoes, UltimaAtualizacao)
-                VALUES (Now(),?,?,?,?,Now())
-            """, [
-                id_cliente, id_evento, id_status, observacoes
-            ])
+                VALUES (CURRENT_TIMESTAMP,%s,%s,%s,%s,CURRENT_TIMESTAMP)
+            """, [id_cliente, id_evento, id_status, observacoes])
 
             conn.commit()
             mensagem = "Agendamento realizado com sucesso."
 
-        # ==========================
+        # =========================================================
         # FILTROS
-        # ==========================
+        # =========================================================
         busca = request.args.get("q", "").strip()
         filtro_evento = request.args.get("evento", "").strip()
         filtro_status = request.args.get("status", "").strip()
 
+        data = []
+        columns = [
+            "IDAgendamento", "DataAgendamento", "IDCliente", "Atleta",
+            "Telefone", "Contato", "Sexo", "IDEvento", "Evento",
+            "DataEvento", "Cidade", "BalizamentoArquivo",
+            "IDStatusAgendamento", "Status", "Observacoes", "IDVendas"
+        ]
+
+        # =========================================================
+        # LISTA DE AGENDAMENTOS
+        # Consulta simples, sem o bloco de JOINs aninhados do código
+        # anterior.
+        # =========================================================
         sql = """
         SELECT
             A.IDAgendamento,
@@ -3294,161 +3342,198 @@ def web_agendamentos():
             S.StatusAgendamento AS Status,
             A.Observacoes,
             A.IDVendas
-        FROM ((((tblAgendamentos AS A
-        LEFT JOIN tblClientes AS C ON A.IDCliente=C.IDCliente)
-        LEFT JOIN tblEvento AS E ON A.IDEvento=E.IDEvento)
+        FROM tblAgendamentos AS A
+        LEFT JOIN tblClientes AS C ON A.IDCliente=C.IDCliente
+        LEFT JOIN tblEvento AS E ON A.IDEvento=E.IDEvento
         LEFT JOIN tblStatusAgendamento AS S
-          ON A.IDStatusAgendamento=S.IDStatusAgendamento)
-        LEFT JOIN tblSexos AS X ON C.IDSexo=X.IDSexo)
-        WHERE (A.IDVendas Is Null OR A.IDVendas=0)
+            ON A.IDStatusAgendamento=S.IDStatusAgendamento
+        LEFT JOIN tblSexos AS X ON C.IDSexo=X.IDSexo
+        WHERE (A.IDVendas IS NULL OR A.IDVendas=0)
           AND NOT EXISTS (
-              SELECT V.IDVenda
+              SELECT 1
               FROM tblVendaPacotes AS V
               WHERE V.IDAgendamento=A.IDAgendamento
           )
-          AND (S.StatusAgendamento Is Null OR UCase(S.StatusAgendamento) NOT LIKE '%CANCEL%')
+          AND (
+              S.StatusAgendamento IS NULL
+              OR UPPER(S.StatusAgendamento) NOT LIKE '%CANCEL%'
+          )
         """
+
         params = []
 
         if busca:
             sql += """
             AND (
-                C.Nome LIKE ?
-                OR C.Telefone LIKE ?
-                OR C.Contato LIKE ?
-                OR E.NomeEvento LIKE ?
+                C.Nome LIKE %s
+                OR C.Telefone LIKE %s
+                OR C.Contato LIKE %s
+                OR E.NomeEvento LIKE %s
             )
             """
             like = "%" + busca + "%"
             params.extend([like, like, like, like])
 
         if filtro_evento:
-            sql += " AND A.IDEvento=?"
-            params.append(access_int(filtro_evento))
+            sql += " AND A.IDEvento=%s"
+            params.append(id_param(filtro_evento))
 
         if filtro_status:
-            sql += " AND A.IDStatusAgendamento=?"
-            params.append(access_int(filtro_status))
+            sql += " AND A.IDStatusAgendamento=%s"
+            params.append(id_param(filtro_status))
 
-        # REGRA FUNDAMENTAL DO FLUXO:
-        # se o agendamento já gerou uma venda/OS, ele NÃO aparece mais
-        # nesta lista. O histórico continua preservado na venda e no atleta.
-        #
-        # Preferência: quem agendou primeiro aparece primeiro.
         sql += " ORDER BY A.DataAgendamento ASC, A.IDAgendamento ASC"
 
+        # O compat layer converte ? para %s, mas aqui já usamos %s.
         cur.execute(sql, params)
-        columns = [d[0] for d in cur.description]
-        data = []
 
-        for row in cur.fetchall():
+        rows = cur.fetchall()
+
+        for row in rows:
             item = {}
-            for col, value in zip(columns, row):
+            for idx, col in enumerate(columns):
+                # Nunca acessa uma posição inexistente.
+                value = row[idx] if idx < len(row) else ""
+
                 if hasattr(value, "strftime"):
                     value = value.strftime("%d/%m/%Y")
                 elif value is None:
                     value = ""
                 else:
                     value = str(value)
+
                 item[col] = value
+
             data.append(item)
 
-        # ==========================
+        # =========================================================
         # COMBO ATLETAS
-        # ==========================
+        # =========================================================
         cur.execute("""
             SELECT C.IDCliente, C.Nome, E.NomeEquipe, X.Sexo
-            FROM ((tblClientes AS C
-            LEFT JOIN tblEquipes AS E ON C.IDEquipe=E.IDEquipe)
-            LEFT JOIN tblSexos AS X ON C.IDSexo=X.IDSexo)
+            FROM tblClientes AS C
+            LEFT JOIN tblEquipes AS E ON C.IDEquipe=E.IDEquipe
+            LEFT JOIN tblSexos AS X ON C.IDSexo=X.IDSexo
             ORDER BY C.Nome
         """)
-        atletas = [
-            {
-                "id": access_int(r[0]),
-                "nome": r[1] or "",
-                "equipe": r[2] or "", "sexo": r[3] or ""
-            }
-            for r in cur.fetchall()
-        ]
 
-        # ==========================
+        atletas = []
+        for r in cur.fetchall():
+            atletas.append({
+                "id": r[0] if len(r) > 0 else "",
+                "nome": r[1] if len(r) > 1 and r[1] is not None else "",
+                "equipe": r[2] if len(r) > 2 and r[2] is not None else "",
+                "sexo": r[3] if len(r) > 3 and r[3] is not None else ""
+            })
+
+        # =========================================================
         # COMBO EVENTOS
-        # qryComboEventos original
-        # ==========================
+        # =========================================================
         cur.execute("""
             SELECT IDEvento, NomeEvento, DataEvento, Cidade
             FROM tblEvento
             ORDER BY DataEvento ASC, NomeEvento
         """)
+
         eventos = []
         for r in cur.fetchall():
             eventos.append({
-                "id": access_int(r[0]),
-                "nome": r[1] or "",
+                "id": r[0] if len(r) > 0 else "",
+                "nome": r[1] if len(r) > 1 and r[1] is not None else "",
                 "data": r[2].strftime("%d/%m/%Y")
-                    if hasattr(r[2], "strftime") else str(r[2] or ""),
-                "cidade": r[3] or ""
+                    if len(r) > 2 and hasattr(r[2], "strftime")
+                    else (str(r[2] or "") if len(r) > 2 else ""),
+                "cidade": r[3] if len(r) > 3 and r[3] is not None else ""
             })
 
-        # ==========================
+        # =========================================================
         # COMBO STATUS
-        # qryComboStatusAgendamento original
-        # ==========================
+        # =========================================================
         cur.execute("""
             SELECT IDStatusAgendamento, StatusAgendamento
             FROM tblStatusAgendamento
             ORDER BY IDStatusAgendamento
         """)
-        status = [
-            {"id": access_int(r[0]), "nome": r[1] or ""}
+
+        status = []
+        for r in cur.fetchall():
+            status.append({
+                "id": r[0] if len(r) > 0 else "",
+                "nome": r[1] if len(r) > 1 and r[1] is not None else ""
+            })
+
+        # =========================================================
+        # DADOS PARA CADASTRO RÁPIDO DE ATLETA
+        # =========================================================
+        cur.execute("""
+            SELECT IDEquipe, NomeEquipe, Cidade, Estado
+            FROM tblEquipes
+            ORDER BY NomeEquipe
+        """)
+        equipes_cadastro = [
+            {
+                "id": r[0] if len(r) > 0 else "",
+                "nome": r[1] if len(r) > 1 and r[1] is not None else "",
+                "cidade": r[2] if len(r) > 2 and r[2] is not None else "",
+                "estado": r[3] if len(r) > 3 and r[3] is not None else ""
+            }
+            for r in cur.fetchall()
+        ]
+
+        cur.execute("""
+            SELECT IDSexo, Sexo
+            FROM tblSexos
+            ORDER BY Sexo
+        """)
+        sexos_cadastro = [
+            {
+                "id": r[0] if len(r) > 0 else "",
+                "nome": r[1] if len(r) > 1 and r[1] is not None else ""
+            }
+            for r in cur.fetchall()
+        ]
+
+        cur.execute("""
+            SELECT IDModalidade, Modalidade
+            FROM tblModalidades
+            ORDER BY Modalidade
+        """)
+        modalidades_cadastro = [
+            {
+                "id": r[0] if len(r) > 0 else "",
+                "nome": r[1] if len(r) > 1 and r[1] is not None else ""
+            }
             for r in cur.fetchall()
         ]
 
     except Exception as e:
         try:
-            conn.rollback()
+            if conn:
+                conn.rollback()
         except Exception:
             pass
+
+        print("[SGFE-AGENDAMENTOS-ERRO]", flush=True)
+        print(f"[SGFE-AGENDAMENTOS-ERRO] {e}", flush=True)
+
         erro = str(e)
 
         busca = request.args.get("q", "").strip()
         filtro_evento = request.args.get("evento", "").strip()
         filtro_status = request.args.get("status", "").strip()
+
         data = locals().get("data", [])
         atletas = locals().get("atletas", [])
         eventos = locals().get("eventos", [])
         status = locals().get("status", [])
         columns = locals().get("columns", [])
+        equipes_cadastro = locals().get("equipes_cadastro", [])
+        sexos_cadastro = locals().get("sexos_cadastro", [])
+        modalidades_cadastro = locals().get("modalidades_cadastro", [])
 
     finally:
-        conn.close()
-
-    # ==========================
-    # DADOS DO CADASTRO COMPLETO DO ATLETA
-    # ==========================
-    conn_cad = get_connection()
-    try:
-        cur_cad = conn_cad.cursor()
-
-        cur_cad.execute("SELECT IDEquipe, NomeEquipe, Cidade, Estado FROM tblEquipes ORDER BY NomeEquipe")
-        equipes_cadastro = [
-            {
-                "id": access_int(r[0]),
-                "nome": r[1] or "",
-                "cidade": r[2] or "",
-                "estado": r[3] or ""
-            }
-            for r in cur_cad.fetchall()
-        ]
-
-        cur_cad.execute("SELECT IDSexo, Sexo FROM tblSexos ORDER BY Sexo")
-        sexos_cadastro = [{"id": access_int(r[0]), "nome": r[1] or ""} for r in cur_cad.fetchall()]
-
-        cur_cad.execute("SELECT IDModalidade, Modalidade FROM tblModalidades ORDER BY Modalidade")
-        modalidades_cadastro = [{"id": access_int(r[0]), "nome": r[1] or ""} for r in cur_cad.fetchall()]
-    finally:
-        conn_cad.close()
+        if conn:
+            conn.close()
 
     return render_template(
         "agendamentos.html",
