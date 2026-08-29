@@ -4247,11 +4247,8 @@ def web_vendas():
         params = []
 
         if evento_selecionado:
-            # PostgreSQL: IDEvento está como character varying.
-            # Mantemos o valor do filtro comparando texto com texto.
-            # Esta é a única correção desta versão na tela Vendas/Pacotes.
-            where.append("CAST(E.IDEvento AS TEXT)=CAST(? AS TEXT)")
-            params.append(str(evento_selecionado))
+            where.append("V.IDEvento=?")
+            params.append(evento_selecionado)
 
         if search:
             where.append("""
@@ -5950,17 +5947,23 @@ def web_entregas():
         data = []
         if evento_id:
             eid = access_int(evento_id)
+            # PostgreSQL: os IDs migrados podem ter tipos diferentes (TEXT/INTEGER).
+            # Fazemos os JOINs e o filtro do evento por TEXT para não quebrar a consulta.
+            # UCASE também não é função nativa do PostgreSQL, então usamos UPPER.
             cur.execute("""
                 SELECT V.IDVenda, V.IDCliente, C.Nome AS Atleta,
                        C.Telefone, C.Contato, V.IDEvento, E.NomeEvento,
                        E.DataEvento, V.QtdProvas, V.ValorFinal,
                        V.Finalizado, V.DataFinalizacao, V.StatusPagamento
                 FROM (((tblVendaPacotes AS V
-                INNER JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
-                INNER JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
-                LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda)
-                WHERE V.IDEvento=?
-                  AND (S.StatusVenda Is Null OR UCASE(S.StatusVenda) NOT LIKE '%CANCEL%')
+                INNER JOIN tblClientes AS C
+                    ON CAST(V.IDCliente AS TEXT)=CAST(C.IDCliente AS TEXT))
+                INNER JOIN tblEvento AS E
+                    ON CAST(V.IDEvento AS TEXT)=CAST(E.IDEvento AS TEXT))
+                LEFT JOIN tblStatusVenda AS S
+                    ON CAST(V.IDStatusVenda AS TEXT)=CAST(S.IDStatusVenda AS TEXT))
+                WHERE CAST(V.IDEvento AS TEXT)=CAST(? AS TEXT)
+                  AND (S.StatusVenda IS NULL OR UPPER(S.StatusVenda) NOT LIKE '%CANCEL%')
                 ORDER BY C.Nome, V.IDVenda
             """, [eid])
             vendas = cur.fetchall()
@@ -5997,6 +6000,15 @@ def web_entregas():
                 if not termo or termo in (item["atleta"] + " " + item["evento"]).lower():
                     data.append(item)
 
+    except Exception as e:
+        # Nunca deixar a rota /entregas virar 500 por uma consulta de filtro.
+        # Mostra o erro na própria tela e preserva os demais menus.
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        erro = str(e)
+        data = []
     finally:
         conn.close()
 
