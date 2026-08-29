@@ -4247,8 +4247,11 @@ def web_vendas():
         params = []
 
         if evento_selecionado:
-            where.append("V.IDEvento=?")
-            params.append(evento_selecionado)
+            # PostgreSQL: IDEvento está como character varying.
+            # Mantemos o valor do filtro comparando texto com texto.
+            # Esta é a única correção desta versão na tela Vendas/Pacotes.
+            where.append("V.IDEvento::text=?::text")
+            params.append(str(evento_selecionado))
 
         if search:
             where.append("""
