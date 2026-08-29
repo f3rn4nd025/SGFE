@@ -613,9 +613,16 @@ class _SQLiteTableRow:
 
 
 class PostgreSQLCompatCursor:
-    """Adapta as consultas Access/SQLite existentes para PostgreSQL."""
-    def __init__(self, cursor):
+    """Adapta as consultas Access/SQLite existentes para PostgreSQL.
+
+    O banco migrado preserva os nomes originais do Access (ex.:
+    tblVendaPacotes e IDVenda). Como PostgreSQL transforma identificadores
+    sem aspas em minúsculos, esta camada consulta o catálogo e recoloca
+    aspas nos nomes reais antes de executar o SQL legado.
+    """
+    def __init__(self, cursor, identifier_map=None):
         self._cursor = cursor
+        self._identifier_map = identifier_map or {}
 
     @property
     def description(self):
@@ -638,7 +645,7 @@ class PostgreSQLCompatCursor:
         return iter(self._cursor)
 
     def execute(self, sql, params=None):
-        sql = _postgres_sql(sql)
+        sql = _postgres_sql(sql, self._identifier_map)
         if params is None:
             self._cursor.execute(sql)
         else:
@@ -646,7 +653,7 @@ class PostgreSQLCompatCursor:
         return self
 
     def executemany(self, sql, seq_of_params):
-        self._cursor.executemany(_postgres_sql(sql), seq_of_params)
+        self._cursor.executemany(_postgres_sql(sql, self._identifier_map), seq_of_params)
         return self
 
     def tables(self, tableType="TABLE"):
@@ -678,9 +685,43 @@ class PostgreSQLCompatConnection:
         cur = self._conn.cursor()
         cur.execute("SET search_path TO \"public\"" if self.schema == "public" else f'SET search_path TO "{self.schema}", "public"')
         cur.close()
+        self._identifier_map = self._load_postgres_identifiers()
+
+    def _load_postgres_identifiers(self):
+        """Carrega nomes exatos de tabelas e colunas preservados na migração."""
+        result = {}
+        cur = self._conn.cursor()
+        try:
+            cur.execute("""
+                SELECT schemaname, tablename
+                FROM pg_catalog.pg_tables
+                WHERE schemaname = current_schema()
+                   OR schemaname = 'public'
+            """)
+            for schema_name, table_name in cur.fetchall():
+                result[str(table_name).lower()] = str(table_name)
+
+            cur.execute("""
+                SELECT table_schema, table_name, column_name
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                   OR table_schema = 'public'
+            """)
+            for _schema_name, _table_name, column_name in cur.fetchall():
+                # Colunas iguais aparecem em várias tabelas, portanto o
+                # mapeamento global só é usado quando não houver ambiguidade.
+                key = str(column_name).lower()
+                exact = str(column_name)
+                if key not in result:
+                    result[key] = exact
+                elif result[key] != exact:
+                    result[key] = None
+        finally:
+            cur.close()
+        return result
 
     def cursor(self):
-        return PostgreSQLCompatCursor(self._conn.cursor())
+        return PostgreSQLCompatCursor(self._conn.cursor(), self._identifier_map)
 
     def commit(self):
         return self._conn.commit()
@@ -723,8 +764,8 @@ def _sqlite_sql(sql):
     return s
 
 
-def _postgres_sql(sql):
-    """Converte somente as diferenças de dialeto necessárias pelo SGFE."""
+def _postgres_sql(sql, identifier_map=None):
+    """Converte o SQL legado Access para PostgreSQL sem perder maiúsculas."""
     if not isinstance(sql, str):
         return sql
     s = sql
@@ -765,6 +806,35 @@ def _postgres_sql(sql):
 
     # As consultas atuais usam ? como placeholder. psycopg2 usa %s.
     s = s.replace("?", "%s")
+
+    # A migração preservou os nomes do Access com aspas. Sem isso,
+    # PostgreSQL procura por tblvendapacotes em vez de tblVendaPacotes.
+    if identifier_map:
+        import re as _re
+        tokens = []
+        pos = 0
+        for m in _re.finditer(r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"", s):
+            if m.start() > pos:
+                tokens.append((False, s[pos:m.start()]))
+            tokens.append((True, m.group(0)))
+            pos = m.end()
+        tokens.append((False, s[pos:]))
+
+        partes = []
+        for protegido, trecho in tokens:
+            if protegido:
+                partes.append(trecho)
+                continue
+            def _quote_identifier(m):
+                nome = m.group(0)
+                if nome.startswith('%'):
+                    return nome
+                exato = identifier_map.get(nome.lower())
+                if exato and exato.lower() == nome.lower():
+                    return '"' + exato.replace('"', '""') + '"'
+                return nome
+            partes.append(_re.sub(r"(?<![\"%])\b[A-Za-z_][A-Za-z0-9_]*\b", _quote_identifier, trecho))
+        s = ''.join(partes)
     return s
 
 
@@ -997,8 +1067,6 @@ def _ensure_status_pagamento(conn):
     try:
         cur.execute("SELECT TOP 1 StatusPagamento FROM tblVendaPacotes")
     except Exception:
-        # No PostgreSQL, uma consulta que falha aborta a transação atual.
-        # É necessário desfazê-la antes de tentar criar a coluna.
         if _is_postgres():
             conn.rollback()
         cur.execute("ALTER TABLE tblVendaPacotes ADD COLUMN StatusPagamento TEXT(20)")
