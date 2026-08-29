@@ -4404,7 +4404,7 @@ def web_vendas():
             # PostgreSQL: IDEvento está como character varying.
             # Mantemos o valor do filtro comparando texto com texto.
             # Esta é a única correção desta versão na tela Vendas/Pacotes.
-            where.append("CAST(E.IDEvento AS TEXT)=CAST(? AS TEXT)")
+            where.append("TRIM(CAST(V.IDEvento AS TEXT))=TRIM(CAST(? AS TEXT))")
             params.append(str(evento_selecionado))
 
         if search:
