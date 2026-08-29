@@ -638,25 +638,12 @@ class PostgreSQLCompatCursor:
         return iter(self._cursor)
 
     def execute(self, sql, params=None):
-        original_sql = sql
-        converted_sql = _postgres_sql(sql)
-        try:
-            if params is None:
-                self._cursor.execute(converted_sql)
-            else:
-                self._cursor.execute(converted_sql, params)
-            return self
-        except Exception as exc:
-            print("[SGFE-SQL-ERRO]", flush=True)
-            print(f"[SGFE-SQL-ERRO] original={original_sql!r}", flush=True)
-            print(f"[SGFE-SQL-ERRO] convertido={converted_sql!r}", flush=True)
-            print(f"[SGFE-SQL-ERRO] parametros={params!r}", flush=True)
-            print(f"[SGFE-SQL-ERRO] erro={exc}", flush=True)
-            try:
-                self._cursor.connection.rollback()
-            except Exception:
-                pass
-            raise
+        sql = _postgres_sql(sql)
+        if params is None:
+            self._cursor.execute(sql)
+        else:
+            self._cursor.execute(sql, params)
+        return self
 
     def executemany(self, sql, seq_of_params):
         self._cursor.executemany(_postgres_sql(sql), seq_of_params)
@@ -746,16 +733,10 @@ def _postgres_sql(sql):
     s = re.sub(r"SELECT\s+@@IDENTITY", "SELECT LASTVAL()", s, flags=re.I)
 
     # Access SELECT TOP n -> PostgreSQL LIMIT n.
-    # Também cobre SELECT DISTINCT TOP n.
-    m = re.search(
-        r"\bSELECT\s+(DISTINCT\s+)?TOP\s+(\d+)\s+",
-        s,
-        flags=re.I | re.S
-    )
+    m = re.search(r"\bSELECT\s+TOP\s+(\d+)\s+", s, flags=re.I | re.S)
     if m:
-        distinct = m.group(1) or ""
-        n = m.group(2)
-        s = s[:m.start()] + "SELECT " + distinct + s[m.end():]
+        n = m.group(1)
+        s = s[:m.start()] + re.sub(r"\bSELECT\s+TOP\s+\d+\s+", "SELECT ", s[m.start():], count=1, flags=re.I)
         semi = ";" if s.rstrip().endswith(";") else ""
         core = s.rstrip(";").rstrip()
         core += f" LIMIT {n}"
@@ -1342,7 +1323,7 @@ def get_connection():
 
 
 def scalar(cursor, sql, default=0, params=None):
-    """Executa uma consulta escalar sem contaminar a transação em caso de erro."""
+    """Executa uma consulta escalar, aceitando parâmetros opcionais."""
     try:
         if params is None:
             cursor.execute(sql)
@@ -1352,21 +1333,7 @@ def scalar(cursor, sql, default=0, params=None):
         if not row or row[0] is None:
             return default
         return row[0]
-    except Exception as exc:
-        # PostgreSQL aborta a transação quando uma consulta falha.
-        # Sem rollback, a próxima consulta recebe apenas:
-        # "current transaction is aborted".
-        try:
-            raw = getattr(cursor, "_cursor", None)
-            conn = getattr(raw, "connection", None)
-            if conn is not None:
-                conn.rollback()
-        except Exception:
-            pass
-        print("[SGFE-SCALAR-ERRO]", flush=True)
-        print(f"[SGFE-SCALAR-ERRO] sql={sql!r}", flush=True)
-        print(f"[SGFE-SCALAR-ERRO] params={params!r}", flush=True)
-        print(f"[SGFE-SCALAR-ERRO] erro={exc}", flush=True)
+    except Exception:
         return default
 
 
@@ -2048,192 +2015,98 @@ def logout():
 
 @app.route("/api/evento-geral")
 def api_evento_geral():
-    """
-    PAINEL SOMENTE.
-
-    V12 parte da versão V10, que preserva a correção do menu Atletas.
-    A única área alterada aqui é /api/evento-geral.
-
-    No PostgreSQL, IDEvento está armazenado como character varying.
-    O erro anterior acontecia porque o Painel convertia o ID para inteiro
-    antes de usá-lo no WHERE IDEvento=?.
-    """
+    """Retorna os indicadores do evento para o painel inicial."""
     conn = None
     try:
         conn = get_connection()
         cur = conn.cursor()
-
-        # -----------------------------------------------------
-        # 1) Lista de eventos
-        # -----------------------------------------------------
+        eventos = []
         cur.execute("""
             SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
             FROM tblEvento
             ORDER BY DataEvento DESC, NomeEvento
         """)
-
-        eventos = []
         for r in cur.fetchall():
             eventos.append({
-                "id": r[0],
+                "id": access_int(r[0]),
                 "nome": str(r[1] or ""),
-                "data": r[2].strftime("%d/%m/%Y")
-                        if hasattr(r[2], "strftime") else str(r[2] or ""),
+                "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
                 "cidade": str(r[3] or ""),
                 "ativo": bool(r[4]) if r[4] is not None else False,
             })
 
-        # -----------------------------------------------------
-        # 2) ID do evento selecionado
-        #    IMPORTANTE: mantém como texto para o PostgreSQL.
-        # -----------------------------------------------------
-        evento_id = request.args.get("evento", "").strip()
-
-        if not evento_id and eventos:
-            evento_id = str(eventos[0]["id"])
-
+        evento_id_raw = request.args.get("evento", "").strip()
+        evento_id = access_int(evento_id_raw) if evento_id_raw else (eventos[0]["id"] if eventos else 0)
         resumo = {
-            "agendamentos": 0,
-            "vendas": 0,
-            "entregas_pendentes": 0,
-            "pagamentos_pendentes": 0,
-            "total_vendido": 0.0,
-            "total_recebido": 0.0,
-            "despesas": 0.0,
-            "lucro": 0.0,
+            "agendamentos": 0, "vendas": 0, "entregas_pendentes": 0,
+            "pagamentos_pendentes": 0, "total_vendido": 0.0,
+            "total_recebido": 0.0, "despesas": 0.0, "lucro": 0.0
         }
-
         evento_info = None
 
         if evento_id:
-            # -------------------------------------------------
-            # 3) Evento selecionado
-            #    IDEvento recebe STRING, pois é varchar no PG.
-            # -------------------------------------------------
             cur.execute("""
                 SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
-                FROM tblEvento
-                WHERE IDEvento=?
-            """, [str(evento_id)])
-
+                FROM tblEvento WHERE IDEvento=?
+            """, [evento_id])
             r = cur.fetchone()
-
             if r:
                 evento_info = {
-                    "id": r[0],
+                    "id": access_int(r[0]),
                     "nome": str(r[1] or ""),
-                    "data": r[2].strftime("%d/%m/%Y")
-                            if hasattr(r[2], "strftime") else str(r[2] or ""),
+                    "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
                     "cidade": str(r[3] or ""),
                     "ativo": bool(r[4]) if r[4] is not None else False,
                 }
 
-                # -------------------------------------------------
-                # 4) AGENDAMENTOS
-                # -------------------------------------------------
-                resumo["agendamentos"] = int(scalar(
-                    cur,
-                    "SELECT Count(*) FROM tblAgendamentos WHERE IDEvento=?",
-                    0,
-                    [str(evento_id)]
-                ) or 0)
+                resumo["agendamentos"] = int(scalar(cur,
+                    "SELECT Count(*) FROM tblAgendamentos WHERE IDEvento=?", 0, [evento_id]) or 0)
 
-                # -------------------------------------------------
-                # 5) VENDAS
-                # -------------------------------------------------
                 cur.execute("""
-                    SELECT V.IDVenda, V.ValorFinal, V.Finalizado,
-                           V.StatusPagamento
-                    FROM tblVendaPacotes AS V
-                    WHERE V.IDEvento=?
-                """, [str(evento_id)])
-
+                    SELECT V.IDVenda, V.ValorFinal, V.Finalizado, V.StatusPagamento
+                    FROM tblVendaPacotes AS V WHERE V.IDEvento=?
+                """, [evento_id])
                 vendas_evento = cur.fetchall()
-
                 resumo["vendas"] = len(vendas_evento)
-                resumo["total_vendido"] = sum(
-                    float(r[1] or 0) for r in vendas_evento
-                )
+                resumo["total_vendido"] = sum(float(r[1] or 0) for r in vendas_evento)
+                resumo["entregas_pendentes"] = sum(1 for r in vendas_evento if r[2] is None or not bool(r[2]))
 
-                resumo["entregas_pendentes"] = sum(
-                    1 for r in vendas_evento
-                    if r[2] is None or not bool(r[2])
-                )
-
-                # -------------------------------------------------
-                # 6) PAGAMENTOS
-                # -------------------------------------------------
                 pagamentos = {}
-
                 cur.execute("""
                     SELECT P.IDVenda, Sum(P.ValorPago)
                     FROM tblPagamento AS P
-                    INNER JOIN tblVendaPacotes AS V
-                        ON P.IDVenda=V.IDVenda
-                    WHERE V.IDEvento=?
-                    GROUP BY P.IDVenda
-                """, [str(evento_id)])
-
+                    INNER JOIN tblVendaPacotes AS V ON P.IDVenda=V.IDVenda
+                    WHERE V.IDEvento=? GROUP BY P.IDVenda
+                """, [evento_id])
                 for r in cur.fetchall():
-                    pagamentos[str(r[0])] = float(r[1] or 0)
+                    pagamentos[access_int(r[0])] = float(r[1] or 0)
 
                 recebido = 0.0
                 pendentes = 0
-
                 for r in vendas_evento:
-                    venda_id = str(r[0])
+                    venda_id = access_int(r[0])
                     valor = float(r[1] or 0)
                     status_pg = str(r[3] or "aberto").strip().lower()
                     pago = pagamentos.get(venda_id, 0.0)
-
                     if status_pg == "cortesia":
                         continue
-
                     recebido += min(pago, valor) if valor > 0 else 0.0
-
                     if pago < valor - 0.009:
                         pendentes += 1
-
                 resumo["total_recebido"] = recebido
                 resumo["pagamentos_pendentes"] = pendentes
 
-                # -------------------------------------------------
-                # 7) DESPESAS
-                # -------------------------------------------------
-                resumo["despesas"] = money(scalar(
-                    cur,
-                    "SELECT Sum(ValorDespesa) "
-                    "FROM tblDespesasEvento WHERE IDEvento=?",
-                    0,
-                    [str(evento_id)]
-                ))
+                try:
+                    resumo["despesas"] = money(scalar(cur,
+                        "SELECT Sum(ValorDespesa) FROM tblDespesasEvento WHERE IDEvento=?",
+                        0, [evento_id]))
+                except Exception:
+                    resumo["despesas"] = 0.0
+                resumo["lucro"] = resumo["total_recebido"] - resumo["despesas"]
 
-                resumo["lucro"] = (
-                    resumo["total_recebido"] - resumo["despesas"]
-                )
-
-        return jsonify({
-            "ok": True,
-            "eventos": eventos,
-            "evento": evento_info,
-            "resumo": resumo
-        })
-
+        return jsonify({"ok": True, "eventos": eventos, "evento": evento_info, "resumo": resumo})
     except Exception as e:
-        print("[SGFE-PAINEL-ERRO]", flush=True)
-        print(f"[SGFE-PAINEL-ERRO] {e}", flush=True)
-
-        try:
-            if conn:
-                conn.rollback()
-        except Exception:
-            pass
-
-        return jsonify({
-            "ok": False,
-            "erro": str(e)
-        }), 500
-
+        return jsonify({"ok": False, "erro": str(e)}), 500
     finally:
         if conn:
             conn.close()
@@ -2449,31 +2322,16 @@ def module_page(page, title, subtitle, table_name, search_label):
 
 @app.route("/atletas")
 def web_atletas():
-    """
-    ATLETAS SOMENTE.
-
-    O Painel (/api/evento-geral) não é alterado nesta versão.
-
-    A consulta retorna os 53 clientes do PostgreSQL e cria aliases para
-    os nomes de campos usados pelo template. Isso evita a situação em que
-    a consulta encontra os registros, mas a tabela fica visualmente vazia
-    porque o template procura outro nome de chave.
-    """
     search = request.args.get("q", "").strip()
     conn = get_connection()
-
     try:
         cur = conn.cursor()
-
         sql = """
         SELECT
             C.IDCliente,
-            C.Nome,
             C.Nome AS Atleta,
             X.Sexo,
-            X.Sexo AS Categoria,
             C.AnoNascimento,
-            E.NomeEquipe,
             E.NomeEquipe AS Equipe,
             M.Modalidade,
             C.Telefone,
@@ -2485,9 +2343,7 @@ def web_atletas():
         LEFT JOIN tblModalidades AS M ON C.IDModalidade=M.IDModalidade)
         LEFT JOIN tblSexos AS X ON C.IDSexo=X.IDSexo
         """
-
-        params = []
-
+        params=[]
         if search:
             sql += """
             WHERE C.Nome LIKE ?
@@ -2497,99 +2353,44 @@ def web_atletas():
             """
             like = "%" + search + "%"
             params = [like, like, like, like]
-
         sql += " ORDER BY C.Nome"
 
         cur.execute(sql, params)
-        rows = cur.fetchall()
-
-        data = []
-
-        for row in rows:
-            # Acesso por posição, sem depender do nome retornado pelo driver.
-            id_cliente = row[0]
-            nome = row[1]
-            atleta = row[2]
-            sexo = row[3]
-            categoria = row[4]
-            ano = row[5]
-            nome_equipe = row[6]
-            equipe = row[7]
-            modalidade = row[8]
-            telefone = row[9]
-            contato = row[10]
-            cidade = row[11]
-            estado = row[12]
-
-            # Mantemos todos os aliases necessários para o template.
-            item = {
-                "IDCliente": "" if id_cliente is None else str(id_cliente),
-                "id": "" if id_cliente is None else str(id_cliente),
-
-                "Nome": "" if nome is None else str(nome),
-                "nome": "" if nome is None else str(nome),
-
-                "Atleta": "" if atleta is None else str(atleta),
-                "atleta": "" if atleta is None else str(atleta),
-
-                "Sexo": "" if sexo is None else str(sexo),
-                "sexo": "" if sexo is None else str(sexo),
-
-                "Categoria": "" if categoria is None else str(categoria),
-                "categoria": "" if categoria is None else str(categoria),
-
-                "AnoNascimento": "" if ano is None else str(ano),
-                "ano_nascimento": "" if ano is None else str(ano),
-
-                "NomeEquipe": "" if nome_equipe is None else str(nome_equipe),
-                "Equipe": "" if equipe is None else str(equipe),
-                "equipe": "" if equipe is None else str(equipe),
-
-                "Modalidade": "" if modalidade is None else str(modalidade),
-                "modalidade": "" if modalidade is None else str(modalidade),
-
-                "Telefone": "" if telefone is None else str(telefone),
-                "telefone": "" if telefone is None else str(telefone),
-
-                "Contato": "" if contato is None else str(contato),
-                "contato": "" if contato is None else str(contato),
-
-                "Cidade": "" if cidade is None else str(cidade),
-                "cidade": "" if cidade is None else str(cidade),
-
-                "Estado": "" if estado is None else str(estado),
-                "estado": "" if estado is None else str(estado),
-            }
-
+        # PostgreSQL devolve nomes de colunas/aliases não-quotados em minúsculo.
+        # O template do SGFE usa os nomes legados do Access (IDCliente, Atleta,
+        # Equipe, etc.). Mantemos exatamente esses nomes no dicionário enviado
+        # ao template para que os 53 registros sejam exibidos corretamente.
+        colunas_template = [
+            "IDCliente", "Atleta", "Sexo", "AnoNascimento", "Equipe",
+            "Modalidade", "Telefone", "Contato", "Cidade", "Estado"
+        ]
+        data=[]
+        for row in cur.fetchall():
+            item={}
+            for pos, col_template in enumerate(colunas_template):
+                value = row[pos] if pos < len(row) else ""
+                if value is None:
+                    value=""
+                else:
+                    value=str(value)
+                item[col_template]=value
             data.append(item)
-
     finally:
         conn.close()
 
     return render_template(
-        "module.html",
-        page="atletas",
+        "module.html", page="atletas",
         title="Atletas",
         subtitle="Cadastro e histórico dos atletas do SGFE",
-        columns=[
-            "IDCliente",
-            "Atleta",
-            "Sexo",
-            "AnoNascimento",
-            "Equipe",
-            "Modalidade",
-            "Telefone",
-            "Contato",
-            "Cidade",
-            "Estado"
-        ],
-        data=data,
-        search=search,
+        columns=["IDCliente","Atleta","Sexo","AnoNascimento","Equipe",
+                 "Modalidade","Telefone","Contato","Cidade","Estado"],
+        data=data, search=search,
         search_label="Pesquisar atleta, equipe ou telefone...",
         currency_columns=[],
         mensagem=request.args.get("ok", ""),
         erro=request.args.get("erro", "")
     )
+
 
 
 @app.route("/atletas/<int:cliente_id>/editar", methods=["GET", "POST"])
@@ -2827,23 +2628,15 @@ def gerenciar_balizamento_evento(evento_id):
 
             # Substituição segura: apaga apenas o balizamento estruturado anterior do evento.
             cur.execute("DELETE FROM tblBalizamentoProvas WHERE IDEvento=?", [evento_id])
-
-            # PostgreSQL migrado: a coluna IDBalizamento pode ter vindo do Access
-            # como NOT NULL, mas sem DEFAULT/sequence. No Access o AUTOINCREMENT
-            # preenchia esse campo sozinho. Aqui geramos os IDs explicitamente.
-            cur.execute("SELECT COALESCE(MAX(IDBalizamento::bigint), 0) FROM tblBalizamentoProvas")
-            proximo_id = int(cur.fetchone()[0] or 0) + 1
-
             for item in registros:
                 cur.execute("""
                     INSERT INTO tblBalizamentoProvas
-                    (IDBalizamento, IDEvento, NumeroProva, NomeProva, NumeroSerie, Raia, NomeAtleta, Registro, Pagina)
-                    VALUES (?,?,?,?,?,?,?,?,?)
+                    (IDEvento, NumeroProva, NomeProva, NumeroSerie, Raia, NomeAtleta, Registro, Pagina)
+                    VALUES (?,?,?,?,?,?,?,?)
                 """, [
-                    proximo_id, evento_id, item["prova"], item["nome_prova"], item["serie"],
+                    evento_id, item["prova"], item["nome_prova"], item["serie"],
                     item["raia"], item["nome_atleta"], item["registro"], item["pagina"]
                 ])
-                proximo_id += 1
 
             antigo = evento[4] or ""
             antigo_caminho = ""
@@ -3214,474 +3007,256 @@ def imprimir_balizamento_evento(evento_id):
         conn.close()
 
 
-
 @app.route("/agendamentos", methods=["GET", "POST"])
 def web_agendamentos():
-    """
-    V16 - SOMENTE AGENDAMENTOS.
-
-    Correção: joins entre IDs do PostgreSQL são comparados como TEXT,
-    pois a migração possui alguns IDs com tipos diferentes (varchar/integer).
-
-    Painel e Atletas permanecem intocados.
-    No PostgreSQL, esta rota usa psycopg2 diretamente, sem passar pela
-    camada de compatibilidade que estava produzindo o "list index out of range".
-    """
     mensagem = ""
     erro = ""
-    busca = request.args.get("q", "").strip()
-    filtro_evento = request.args.get("evento", "").strip()
-    filtro_status = request.args.get("status", "").strip()
 
-    data = []
-    atletas = []
-    eventos = []
-    status = []
-    equipes_cadastro = []
-    sexos_cadastro = []
-    modalidades_cadastro = []
-
-    conn = None
-    cur = None
-
+    conn = get_connection()
     try:
-        # =========================================================
-        # POSTGRESQL: conexão direta e cursor normal
-        # =========================================================
-        if _is_postgres():
-            if not DATABASE_URL:
-                raise RuntimeError("DATABASE_URL não foi configurada no Render.")
+        cur = conn.cursor()
 
-            schema = "public"
-            if session.get("perfil") == "FOTOGRAFO" and session.get("fotografo_id"):
-                schema = _tenant_db_path(session["fotografo_id"])
+        # ==========================
+        # NOVO AGENDAMENTO
+        # ==========================
+        if request.method == "POST":
+            id_cliente = access_int(request.form.get("id_cliente") or 0)
+            id_evento = access_int(request.form.get("id_evento") or 0)
+            # O status de um novo agendamento é sempre AGENDADO.
+            cur.execute("SELECT TOP 1 IDStatusAgendamento FROM tblStatusAgendamento WHERE UCASE(StatusAgendamento)='AGENDADO'")
+            status_row = cur.fetchone()
+            if not status_row:
+                raise ValueError("O status AGENDADO não foi encontrado no SGFE.")
+            id_status = access_int(status_row[0])
+            observacoes = request.form.get("observacoes") or ""
 
-            conn = psycopg2.connect(DATABASE_URL, connect_timeout=15)
-            conn.autocommit = False
-            cur = conn.cursor()
+            if not id_cliente:
+                raise ValueError("Selecione um atleta.")
+            if not id_evento:
+                raise ValueError("Selecione um evento.")
+            if not id_status:
+                raise ValueError("Selecione o status do agendamento.")
 
-            if schema == "public":
-                cur.execute('SET search_path TO "public"')
-            else:
-                cur.execute(f'SET search_path TO "{schema}", "public"')
+            # Regra fundamental: o mesmo atleta não pode ser agendado
+            # duas vezes para o mesmo evento enquanto o agendamento anterior
+            # não estiver cancelado.
+            cur.execute("""
+                SELECT A.IDAgendamento, S.StatusAgendamento
+                FROM tblAgendamentos AS A
+                LEFT JOIN tblStatusAgendamento AS S
+                  ON A.IDStatusAgendamento=S.IDStatusAgendamento
+                WHERE A.IDCliente=? AND A.IDEvento=?
+                ORDER BY A.IDAgendamento DESC
+            """, [id_cliente, id_evento])
 
-            # -----------------------------------------------------
-            # SALVAR NOVO AGENDAMENTO
-            # -----------------------------------------------------
-            if request.method == "POST":
-                id_cliente = request.form.get("id_cliente", "").strip()
-                id_evento = request.form.get("id_evento", "").strip()
-                observacoes = request.form.get("observacoes") or ""
-
-                if not id_cliente:
-                    raise ValueError("Selecione um atleta.")
-                if not id_evento:
-                    raise ValueError("Selecione um evento.")
-
-                # IDs da migração PostgreSQL são INTEGER.
-                try:
-                    id_cliente_int = int(id_cliente)
-                    id_evento_int = int(id_evento)
-                except ValueError:
-                    raise ValueError("Atleta ou evento inválido.")
-
-                cur.execute("""
-                    SELECT idstatusagendamento
-                    FROM tblstatusagendamento
-                    WHERE UPPER(statusagendamento)='AGENDADO'
-                    ORDER BY idstatusagendamento
-                    LIMIT 1
-                """)
-                status_row = cur.fetchone()
-                if status_row is None:
-                    raise ValueError("O status AGENDADO não foi encontrado no SGFE.")
-
-                id_status = int(status_row[0])
-
-                cur.execute("""
-                    SELECT a.idagendamento, COALESCE(s.statusagendamento,'')
-                    FROM tblagendamentos a
-                    LEFT JOIN tblstatusagendamento s
-                      ON a.idstatusagendamento::text=s.idstatusagendamento::text
-                    WHERE a.idcliente::text=%s::text AND a.idevento::text=%s::text
-                    ORDER BY a.idagendamento DESC
-                """, (id_cliente_int, id_evento_int))
-
-                for ex in cur.fetchall():
-                    status_antigo = str(ex[1] or "").upper()
-                    if "CANCEL" not in status_antigo:
-                        raise ValueError(
-                            f"Este atleta já possui o agendamento #{ex[0]} "
-                            "para este evento."
-                        )
-
-                cur.execute("""
-                    INSERT INTO tblagendamentos
-                    (dataagendamento, idcliente, idevento,
-                     idstatusagendamento, observacoes, ultimaatualizacao)
-                    VALUES (CURRENT_TIMESTAMP,%s,%s,%s,%s,CURRENT_TIMESTAMP)
-                """, (id_cliente_int, id_evento_int, id_status, observacoes))
-
-                conn.commit()
-                mensagem = "Agendamento realizado com sucesso."
-
-            # -----------------------------------------------------
-            # LISTA DE AGENDAMENTOS
-            # -----------------------------------------------------
-            sql = """
-                SELECT
-                    a.idagendamento,
-                    a.dataagendamento,
-                    c.idcliente,
-                    c.nome AS atleta,
-                    COALESCE(c.telefone,'') AS telefone,
-                    COALESCE(c.contato,'') AS contato,
-                    COALESCE(sx.sexo,'') AS sexo,
-                    e.idevento,
-                    e.nomeevento AS evento,
-                    e.dataevento,
-                    COALESCE(e.cidade,'') AS cidade,
-                    COALESCE(e.balizamentoarquivo,'') AS balizamentoarquivo,
-                    sa.idstatusagendamento,
-                    COALESCE(sa.statusagendamento,'') AS status,
-                    COALESCE(a.observacoes,'') AS observacoes,
-                    a.idvendas
-                FROM tblagendamentos a
-                LEFT JOIN tblclientes c ON a.idcliente::text=c.idcliente::text
-                LEFT JOIN tblevento e ON a.idevento::text=e.idevento::text
-                LEFT JOIN tblstatusagendamento sa
-                  ON a.idstatusagendamento::text=sa.idstatusagendamento::text
-                LEFT JOIN tblsexos sx ON c.idsexo::text=sx.idsexo::text
-                WHERE (a.idvendas IS NULL OR a.idvendas::text='0')
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM tblvendapacotes v
-                      WHERE v.idagendamento::text=a.idagendamento::text
-                  )
-                  AND (
-                      sa.statusagendamento IS NULL
-                      OR UPPER(sa.statusagendamento) NOT LIKE '%%CANCEL%%'
-                  )
-            """
-            params = []
-
-            if busca:
-                sql += """
-                    AND (
-                        c.nome ILIKE %s
-                        OR COALESCE(c.telefone,'') ILIKE %s
-                        OR COALESCE(c.contato,'') ILIKE %s
-                        OR e.nomeevento ILIKE %s
+            existentes = cur.fetchall()
+            for ex in existentes:
+                status_antigo = str(ex[1] or "").upper()
+                if "CANCEL" not in status_antigo:
+                    raise ValueError(
+                        f"Este atleta já possui o agendamento #{ex[0]} "
+                        "para este evento."
                     )
-                """
-                like = "%" + busca + "%"
-                params.extend([like, like, like, like])
-
-            if filtro_evento:
-                try:
-                    params.append(int(filtro_evento))
-                    sql += " AND a.idevento::text=%s::text"
-                except ValueError:
-                    sql += " AND 1=0"
-
-            if filtro_status:
-                try:
-                    params.append(int(filtro_status))
-                    sql += " AND a.idstatusagendamento::text=%s::text"
-                except ValueError:
-                    sql += " AND 1=0"
-
-            sql += " ORDER BY a.dataagendamento ASC, a.idagendamento ASC"
-
-            cur.execute(sql, tuple(params))
-            rows = cur.fetchall()
-
-            # Mapeamento explícito. Nenhum acesso variável por índice.
-            for row in rows:
-                item = {
-                    "IDAgendamento": row[0],
-                    "DataAgendamento": row[1],
-                    "IDCliente": row[2],
-                    "Atleta": row[3] or "",
-                    "Telefone": row[4] or "",
-                    "Contato": row[5] or "",
-                    "Sexo": row[6] or "",
-                    "IDEvento": row[7],
-                    "Evento": row[8] or "",
-                    "DataEvento": row[9],
-                    "Cidade": row[10] or "",
-                    "BalizamentoArquivo": row[11] or "",
-                    "IDStatusAgendamento": row[12],
-                    "Status": row[13] or "",
-                    "Observacoes": row[14] or "",
-                    "IDVendas": row[15],
-                }
-
-                for campo in ("DataAgendamento", "DataEvento"):
-                    if hasattr(item[campo], "strftime"):
-                        item[campo] = item[campo].strftime("%d/%m/%Y")
-                    elif item[campo] is None:
-                        item[campo] = ""
-
-                data.append(item)
-
-            # -----------------------------------------------------
-            # ATLETAS DO AGENDAMENTO
-            # -----------------------------------------------------
-            cur.execute("""
-                SELECT c.idcliente,
-                       COALESCE(c.nome,''),
-                       COALESCE(eq.nomeequipe,''),
-                       COALESCE(sx.sexo,'')
-                FROM tblclientes c
-                LEFT JOIN tblequipes eq ON c.idequipe::text=eq.idequipe::text
-                LEFT JOIN tblsexos sx ON c.idsexo::text=sx.idsexo::text
-                ORDER BY c.nome
-            """)
-            for r in cur.fetchall():
-                atletas.append({
-                    "id": r[0],
-                    "nome": r[1] or "",
-                    "equipe": r[2] or "",
-                    "sexo": r[3] or ""
-                })
-
-            # -----------------------------------------------------
-            # EVENTOS
-            # -----------------------------------------------------
-            cur.execute("""
-                SELECT idevento, COALESCE(nomeevento,''),
-                       dataevento, COALESCE(cidade,'')
-                FROM tblevento
-                ORDER BY dataevento ASC, nomeevento
-            """)
-            for r in cur.fetchall():
-                data_evento = r[2]
-                eventos.append({
-                    "id": r[0],
-                    "nome": r[1] or "",
-                    "data": data_evento.strftime("%d/%m/%Y")
-                        if hasattr(data_evento, "strftime")
-                        else str(data_evento or ""),
-                    "cidade": r[3] or ""
-                })
-
-            # -----------------------------------------------------
-            # STATUS
-            # -----------------------------------------------------
-            cur.execute("""
-                SELECT idstatusagendamento, COALESCE(statusagendamento,'')
-                FROM tblstatusagendamento
-                ORDER BY idstatusagendamento
-            """)
-            for r in cur.fetchall():
-                status.append({"id": r[0], "nome": r[1] or ""})
-
-            # -----------------------------------------------------
-            # DADOS DO CADASTRO RÁPIDO DE ATLETA
-            # -----------------------------------------------------
-            cur.execute("""
-                SELECT idequipe, COALESCE(nomeequipe,''),
-                       COALESCE(cidade,''), COALESCE(estado,'')
-                FROM tblequipes
-                ORDER BY nomeequipe
-            """)
-            for r in cur.fetchall():
-                equipes_cadastro.append({
-                    "id": r[0],
-                    "nome": r[1] or "",
-                    "cidade": r[2] or "",
-                    "estado": r[3] or ""
-                })
 
             cur.execute("""
-                SELECT idsexo, COALESCE(sexo,'')
-                FROM tblsexos
-                ORDER BY sexo
-            """)
-            for r in cur.fetchall():
-                sexos_cadastro.append({"id": r[0], "nome": r[1] or ""})
+                INSERT INTO tblAgendamentos
+                (DataAgendamento, IDCliente, IDEvento,
+                 IDStatusAgendamento, Observacoes, UltimaAtualizacao)
+                VALUES (Now(),?,?,?,?,Now())
+            """, [
+                id_cliente, id_evento, id_status, observacoes
+            ])
 
-            cur.execute("""
-                SELECT idmodalidade, COALESCE(modalidade,'')
-                FROM tblmodalidades
-                ORDER BY modalidade
-            """)
-            for r in cur.fetchall():
-                modalidades_cadastro.append({"id": r[0], "nome": r[1] or ""})
+            conn.commit()
+            mensagem = "Agendamento realizado com sucesso."
 
-        # =========================================================
-        # ACCESS / SQLITE
-        # Mantém o comportamento anterior fora do Render.
-        # =========================================================
-        else:
-            conn = get_connection()
-            cur = conn.cursor()
+        # ==========================
+        # FILTROS
+        # ==========================
+        busca = request.args.get("q", "").strip()
+        filtro_evento = request.args.get("evento", "").strip()
+        filtro_status = request.args.get("status", "").strip()
 
-            if request.method == "POST":
-                id_cliente = access_int(request.form.get("id_cliente") or 0)
-                id_evento = access_int(request.form.get("id_evento") or 0)
-                observacoes = request.form.get("observacoes") or ""
+        sql = """
+        SELECT
+            A.IDAgendamento,
+            A.DataAgendamento,
+            C.IDCliente,
+            C.Nome AS Atleta,
+            C.Telefone AS Telefone,
+            C.Contato AS Contato,
+            X.Sexo AS Sexo,
+            E.IDEvento,
+            E.NomeEvento AS Evento,
+            E.DataEvento,
+            E.Cidade,
+            E.BalizamentoArquivo,
+            S.IDStatusAgendamento,
+            S.StatusAgendamento AS Status,
+            A.Observacoes,
+            A.IDVendas
+        FROM ((((tblAgendamentos AS A
+        LEFT JOIN tblClientes AS C ON A.IDCliente=C.IDCliente)
+        LEFT JOIN tblEvento AS E ON A.IDEvento=E.IDEvento)
+        LEFT JOIN tblStatusAgendamento AS S
+          ON A.IDStatusAgendamento=S.IDStatusAgendamento)
+        LEFT JOIN tblSexos AS X ON C.IDSexo=X.IDSexo)
+        WHERE (A.IDVendas Is Null OR A.IDVendas=0)
+          AND NOT EXISTS (
+              SELECT V.IDVenda
+              FROM tblVendaPacotes AS V
+              WHERE V.IDAgendamento=A.IDAgendamento
+          )
+          AND (S.StatusAgendamento Is Null OR UCase(S.StatusAgendamento) NOT LIKE '%CANCEL%')
+        """
+        params = []
 
-                cur.execute(
-                    "SELECT TOP 1 IDStatusAgendamento "
-                    "FROM tblStatusAgendamento "
-                    "WHERE UCASE(StatusAgendamento)='AGENDADO'"
-                )
-                status_row = cur.fetchone()
-                if not status_row:
-                    raise ValueError("O status AGENDADO não foi encontrado no SGFE.")
+        if busca:
+            sql += """
+            AND (
+                C.Nome LIKE ?
+                OR C.Telefone LIKE ?
+                OR C.Contato LIKE ?
+                OR E.NomeEvento LIKE ?
+            )
+            """
+            like = "%" + busca + "%"
+            params.extend([like, like, like, like])
 
-                id_status = access_int(status_row[0])
+        if filtro_evento:
+            sql += " AND A.IDEvento=?"
+            params.append(access_int(filtro_evento))
 
-                if not id_cliente:
-                    raise ValueError("Selecione um atleta.")
-                if not id_evento:
-                    raise ValueError("Selecione um evento.")
+        if filtro_status:
+            sql += " AND A.IDStatusAgendamento=?"
+            params.append(access_int(filtro_status))
 
-                cur.execute("""
-                    SELECT A.IDAgendamento, S.StatusAgendamento
-                    FROM tblAgendamentos AS A
-                    LEFT JOIN tblStatusAgendamento AS S
-                      ON A.IDStatusAgendamento=S.IDStatusAgendamento
-                    WHERE A.IDCliente=? AND A.IDEvento=?
-                    ORDER BY A.IDAgendamento DESC
-                """, [id_cliente, id_evento])
+        # REGRA FUNDAMENTAL DO FLUXO:
+        # se o agendamento já gerou uma venda/OS, ele NÃO aparece mais
+        # nesta lista. O histórico continua preservado na venda e no atleta.
+        #
+        # Preferência: quem agendou primeiro aparece primeiro.
+        sql += " ORDER BY A.DataAgendamento ASC, A.IDAgendamento ASC"
 
-                for ex in cur.fetchall():
-                    if "CANCEL" not in str(ex[1] or "").upper():
-                        raise ValueError(
-                            f"Este atleta já possui o agendamento #{ex[0]} "
-                            "para este evento."
-                        )
+        cur.execute(sql, params)
+        columns = [d[0] for d in cur.description]
+        data = []
 
-                cur.execute("""
-                    INSERT INTO tblAgendamentos
-                    (DataAgendamento, IDCliente, IDEvento,
-                     IDStatusAgendamento, Observacoes, UltimaAtualizacao)
-                    VALUES (Now(),?,?,?,?,Now())
-                """, [id_cliente, id_evento, id_status, observacoes])
-                conn.commit()
-                mensagem = "Agendamento realizado com sucesso."
+        for row in cur.fetchall():
+            item = {}
+            for col, value in zip(columns, row):
+                if hasattr(value, "strftime"):
+                    value = value.strftime("%d/%m/%Y")
+                elif value is None:
+                    value = ""
+                else:
+                    value = str(value)
+                item[col] = value
+            data.append(item)
 
-            cur.execute("""
-                SELECT
-                    A.IDAgendamento,A.DataAgendamento,C.IDCliente,C.Nome,
-                    C.Telefone,C.Contato,X.Sexo,E.IDEvento,E.NomeEvento,
-                    E.DataEvento,E.Cidade,E.BalizamentoArquivo,
-                    S.IDStatusAgendamento,S.StatusAgendamento,
-                    A.Observacoes,A.IDVendas
-                FROM ((((tblAgendamentos A
-                LEFT JOIN tblClientes C ON A.IDCliente=C.IDCliente)
-                LEFT JOIN tblEvento E ON A.IDEvento=E.IDEvento)
-                LEFT JOIN tblStatusAgendamento S
-                  ON A.IDStatusAgendamento=S.IDStatusAgendamento)
-                LEFT JOIN tblSexos X ON C.IDSexo=X.IDSexo)
-                WHERE (A.IDVendas Is Null OR A.IDVendas=0)
-                  AND NOT EXISTS (
-                      SELECT V.IDVenda FROM tblVendaPacotes V
-                      WHERE V.IDAgendamento=A.IDAgendamento
-                  )
-                  AND (S.StatusAgendamento Is Null
-                       OR UCase(S.StatusAgendamento) NOT LIKE '%CANCEL%')
-            """)
-            for row in cur.fetchall():
-                item = {
-                    "IDAgendamento": row[0], "DataAgendamento": row[1],
-                    "IDCliente": row[2], "Atleta": row[3] or "",
-                    "Telefone": row[4] or "", "Contato": row[5] or "",
-                    "Sexo": row[6] or "", "IDEvento": row[7],
-                    "Evento": row[8] or "", "DataEvento": row[9],
-                    "Cidade": row[10] or "", "BalizamentoArquivo": row[11] or "",
-                    "IDStatusAgendamento": row[12], "Status": row[13] or "",
-                    "Observacoes": row[14] or "", "IDVendas": row[15]
-                }
-                for campo in ("DataAgendamento", "DataEvento"):
-                    if hasattr(item[campo], "strftime"):
-                        item[campo] = item[campo].strftime("%d/%m/%Y")
-                    elif item[campo] is None:
-                        item[campo] = ""
-                data.append(item)
+        # ==========================
+        # COMBO ATLETAS
+        # ==========================
+        cur.execute("""
+            SELECT C.IDCliente, C.Nome, E.NomeEquipe, X.Sexo
+            FROM ((tblClientes AS C
+            LEFT JOIN tblEquipes AS E ON C.IDEquipe=E.IDEquipe)
+            LEFT JOIN tblSexos AS X ON C.IDSexo=X.IDSexo)
+            ORDER BY C.Nome
+        """)
+        atletas = [
+            {
+                "id": access_int(r[0]),
+                "nome": r[1] or "",
+                "equipe": r[2] or "", "sexo": r[3] or ""
+            }
+            for r in cur.fetchall()
+        ]
 
-            cur.execute("""
-                SELECT C.IDCliente,C.Nome,E.NomeEquipe,X.Sexo
-                FROM ((tblClientes C
-                LEFT JOIN tblEquipes E ON C.IDEquipe=E.IDEquipe)
-                LEFT JOIN tblSexos X ON C.IDSexo=X.IDSexo)
-                ORDER BY C.Nome
-            """)
-            for r in cur.fetchall():
-                atletas.append({
-                    "id": r[0], "nome": r[1] or "",
-                    "equipe": r[2] or "", "sexo": r[3] or ""
-                })
+        # ==========================
+        # COMBO EVENTOS
+        # qryComboEventos original
+        # ==========================
+        cur.execute("""
+            SELECT IDEvento, NomeEvento, DataEvento, Cidade
+            FROM tblEvento
+            ORDER BY DataEvento ASC, NomeEvento
+        """)
+        eventos = []
+        for r in cur.fetchall():
+            eventos.append({
+                "id": access_int(r[0]),
+                "nome": r[1] or "",
+                "data": r[2].strftime("%d/%m/%Y")
+                    if hasattr(r[2], "strftime") else str(r[2] or ""),
+                "cidade": r[3] or ""
+            })
 
-            cur.execute("""
-                SELECT IDEvento,NomeEvento,DataEvento,Cidade
-                FROM tblEvento ORDER BY DataEvento ASC,NomeEvento
-            """)
-            for r in cur.fetchall():
-                eventos.append({
-                    "id": r[0], "nome": r[1] or "",
-                    "data": r[2].strftime("%d/%m/%Y")
-                        if hasattr(r[2], "strftime") else str(r[2] or ""),
-                    "cidade": r[3] or ""
-                })
-
-            cur.execute("""
-                SELECT IDStatusAgendamento,StatusAgendamento
-                FROM tblStatusAgendamento ORDER BY IDStatusAgendamento
-            """)
-            for r in cur.fetchall():
-                status.append({"id": r[0], "nome": r[1] or ""})
-
-            cur.execute("""
-                SELECT IDEquipe,NomeEquipe,Cidade,Estado
-                FROM tblEquipes ORDER BY NomeEquipe
-            """)
-            for r in cur.fetchall():
-                equipes_cadastro.append({
-                    "id": r[0], "nome": r[1] or "",
-                    "cidade": r[2] or "", "estado": r[3] or ""
-                })
-
-            cur.execute("SELECT IDSexo,Sexo FROM tblSexos ORDER BY Sexo")
-            for r in cur.fetchall():
-                sexos_cadastro.append({"id": r[0], "nome": r[1] or ""})
-
-            cur.execute("SELECT IDModalidade,Modalidade FROM tblModalidades ORDER BY Modalidade")
-            for r in cur.fetchall():
-                modalidades_cadastro.append({"id": r[0], "nome": r[1] or ""})
+        # ==========================
+        # COMBO STATUS
+        # qryComboStatusAgendamento original
+        # ==========================
+        cur.execute("""
+            SELECT IDStatusAgendamento, StatusAgendamento
+            FROM tblStatusAgendamento
+            ORDER BY IDStatusAgendamento
+        """)
+        status = [
+            {"id": access_int(r[0]), "nome": r[1] or ""}
+            for r in cur.fetchall()
+        ]
 
     except Exception as e:
         try:
-            if conn:
-                conn.rollback()
+            conn.rollback()
         except Exception:
             pass
-
         erro = str(e)
-        print(f"[SGFE-AGENDAMENTOS-V16] ERRO: {e}", flush=True)
-        print(f"[SGFE-AGENDAMENTOS-V16] tipo: {type(e).__name__}", flush=True)
+
+        busca = request.args.get("q", "").strip()
+        filtro_evento = request.args.get("evento", "").strip()
+        filtro_status = request.args.get("status", "").strip()
+        data = locals().get("data", [])
+        atletas = locals().get("atletas", [])
+        eventos = locals().get("eventos", [])
+        status = locals().get("status", [])
+        columns = locals().get("columns", [])
 
     finally:
-        try:
-            if cur:
-                cur.close()
-        except Exception:
-            pass
-        try:
-            if conn:
-                conn.close()
-        except Exception:
-            pass
+        conn.close()
+
+    # ==========================
+    # DADOS DO CADASTRO COMPLETO DO ATLETA
+    # ==========================
+    conn_cad = get_connection()
+    try:
+        cur_cad = conn_cad.cursor()
+
+        cur_cad.execute("SELECT IDEquipe, NomeEquipe, Cidade, Estado FROM tblEquipes ORDER BY NomeEquipe")
+        equipes_cadastro = [
+            {
+                "id": access_int(r[0]),
+                "nome": r[1] or "",
+                "cidade": r[2] or "",
+                "estado": r[3] or ""
+            }
+            for r in cur_cad.fetchall()
+        ]
+
+        cur_cad.execute("SELECT IDSexo, Sexo FROM tblSexos ORDER BY Sexo")
+        sexos_cadastro = [{"id": access_int(r[0]), "nome": r[1] or ""} for r in cur_cad.fetchall()]
+
+        cur_cad.execute("SELECT IDModalidade, Modalidade FROM tblModalidades ORDER BY Modalidade")
+        modalidades_cadastro = [{"id": access_int(r[0]), "nome": r[1] or ""} for r in cur_cad.fetchall()]
+    finally:
+        conn_cad.close()
 
     return render_template(
         "agendamentos.html",
         page="agendamentos",
         title="Agendamentos",
         subtitle="Agenda completa do SGFE",
-        columns=[],
+        columns=columns,
         data=data,
         atletas=atletas,
         eventos=eventos,
@@ -4238,9 +3813,9 @@ def web_vendas():
             V.Finalizado,
             V.DataFinalizacao
         FROM (((tblVendaPacotes AS V
-        LEFT JOIN tblClientes AS C ON CAST(V.IDCliente AS TEXT)=CAST(C.IDCliente AS TEXT))
-        LEFT JOIN tblEvento AS E ON CAST(V.IDEvento AS TEXT)=CAST(E.IDEvento AS TEXT))
-        LEFT JOIN tblStatusVenda AS S ON CAST(V.IDStatusVenda AS TEXT)=CAST(S.IDStatusVenda AS TEXT))
+        LEFT JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
+        LEFT JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
+        LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda)
         """
 
         where = []
@@ -5947,23 +5522,17 @@ def web_entregas():
         data = []
         if evento_id:
             eid = access_int(evento_id)
-            # PostgreSQL: os IDs migrados podem ter tipos diferentes (TEXT/INTEGER).
-            # Fazemos os JOINs e o filtro do evento por TEXT para não quebrar a consulta.
-            # UCASE também não é função nativa do PostgreSQL, então usamos UPPER.
             cur.execute("""
                 SELECT V.IDVenda, V.IDCliente, C.Nome AS Atleta,
                        C.Telefone, C.Contato, V.IDEvento, E.NomeEvento,
                        E.DataEvento, V.QtdProvas, V.ValorFinal,
                        V.Finalizado, V.DataFinalizacao, V.StatusPagamento
                 FROM (((tblVendaPacotes AS V
-                INNER JOIN tblClientes AS C
-                    ON CAST(V.IDCliente AS TEXT)=CAST(C.IDCliente AS TEXT))
-                INNER JOIN tblEvento AS E
-                    ON CAST(V.IDEvento AS TEXT)=CAST(E.IDEvento AS TEXT))
-                LEFT JOIN tblStatusVenda AS S
-                    ON CAST(V.IDStatusVenda AS TEXT)=CAST(S.IDStatusVenda AS TEXT))
-                WHERE CAST(V.IDEvento AS TEXT)=CAST(? AS TEXT)
-                  AND (S.StatusVenda IS NULL OR UPPER(S.StatusVenda) NOT LIKE '%CANCEL%')
+                INNER JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
+                INNER JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
+                LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda)
+                WHERE V.IDEvento=?
+                  AND (S.StatusVenda Is Null OR UCASE(S.StatusVenda) NOT LIKE '%CANCEL%')
                 ORDER BY C.Nome, V.IDVenda
             """, [eid])
             vendas = cur.fetchall()
@@ -6000,15 +5569,6 @@ def web_entregas():
                 if not termo or termo in (item["atleta"] + " " + item["evento"]).lower():
                     data.append(item)
 
-    except Exception as e:
-        # Nunca deixar a rota /entregas virar 500 por uma consulta de filtro.
-        # Mostra o erro na própria tela e preserva os demais menus.
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        erro = str(e)
-        data = []
     finally:
         conn.close()
 
