@@ -65,30 +65,36 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 .main > .new-card{display:block;box-sizing:border-box;width:100%;}
 .main > .new-card > form.grid{display:grid;grid-template-columns:minmax(280px,1.4fr) minmax(280px,1fr) minmax(180px,1fr);width:100%;box-sizing:border-box;}
 
-/* AGENDAMENTOS: SOMENTE ORGANIZAÇÃO VISUAL DA TABELA */
+/* AGENDAMENTOS: apenas organização das colunas e ações.
+   A tabela permanece dentro da largura da tela. */
 .table-wrap.agendamentos-wrap {
     width: 100%;
     max-width: 100%;
-    overflow-x: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
 }
 .table.agendamentos-table {
     width: 100% !important;
-    min-width: 1450px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
     table-layout: fixed !important;
+    box-sizing: border-box !important;
 }
 .table.agendamentos-table th,
 .table.agendamentos-table td {
     box-sizing: border-box !important;
-    padding-left: 8px !important;
-    padding-right: 8px !important;
-    vertical-align: middle !important;
+    padding-left: 5px !important;
+    padding-right: 5px !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    vertical-align: middle;
 }
 .table.agendamentos-table th:nth-child(1),
 .table.agendamentos-table td:nth-child(1) { width: 7%; }
 .table.agendamentos-table th:nth-child(2),
-.table.agendamentos-table td:nth-child(2) { width: 8%; }
+.table.agendamentos-table td:nth-child(2) { width: 9%; }
 .table.agendamentos-table th:nth-child(3),
-.table.agendamentos-table td:nth-child(3) { width: 14%; }
+.table.agendamentos-table td:nth-child(3) { width: 13%; }
 .table.agendamentos-table th:nth-child(4),
 .table.agendamentos-table td:nth-child(4) { width: 15%; }
 .table.agendamentos-table th:nth-child(5),
@@ -98,38 +104,25 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 .table.agendamentos-table th:nth-child(7),
 .table.agendamentos-table td:nth-child(7) { width: 8%; }
 .table.agendamentos-table th:nth-child(8),
-.table.agendamentos-table td:nth-child(8) { width: 10%; }
+.table.agendamentos-table td:nth-child(8) { width: 11%; }
 .table.agendamentos-table th:nth-child(9),
 .table.agendamentos-table td:nth-child(9) { width: 8%; }
 .table.agendamentos-table th:nth-child(10),
-.table.agendamentos-table td:nth-child(10) { width: 13%; }
-
-.table.agendamentos-table td:nth-child(3),
-.table.agendamentos-table td:nth-child(4),
-.table.agendamentos-table td:nth-child(5),
-.table.agendamentos-table td:nth-child(6),
-.table.agendamentos-table td:nth-child(8) {
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-}
-.table.agendamentos-table td:nth-child(9),
 .table.agendamentos-table td:nth-child(10) {
+    width: 12%;
     white-space: normal !important;
+}
+.table.agendamentos-table td:nth-child(10) {
     overflow: visible !important;
 }
-.table.agendamentos-table td:nth-child(9) .row-action {
+.table.agendamentos-table td:nth-child(10) .row-action {
     display: inline-block;
-    margin-right: 5px;
+    margin: 2px 2px 2px 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    white-space: nowrap;
 }
-.table.agendamentos-table td:nth-child(10) .row-action,
-.table.agendamentos-table td:nth-child(10) form {
-    margin-right: 5px;
-    margin-bottom: 4px;
-}
-.table.agendamentos-table td:nth-child(10) form {
-    display: inline-block !important;
-}
+
 </style>
 
 <style id="sgfe-menu-logout-style">
