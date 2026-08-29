@@ -638,12 +638,25 @@ class PostgreSQLCompatCursor:
         return iter(self._cursor)
 
     def execute(self, sql, params=None):
-        sql = _postgres_sql(sql)
-        if params is None:
-            self._cursor.execute(sql)
-        else:
-            self._cursor.execute(sql, params)
-        return self
+        original_sql = sql
+        converted_sql = _postgres_sql(sql)
+        try:
+            if params is None:
+                self._cursor.execute(converted_sql)
+            else:
+                self._cursor.execute(converted_sql, params)
+            return self
+        except Exception as exc:
+            print("[SGFE-SQL-ERRO]", flush=True)
+            print(f"[SGFE-SQL-ERRO] original={original_sql!r}", flush=True)
+            print(f"[SGFE-SQL-ERRO] convertido={converted_sql!r}", flush=True)
+            print(f"[SGFE-SQL-ERRO] parametros={params!r}", flush=True)
+            print(f"[SGFE-SQL-ERRO] erro={exc}", flush=True)
+            try:
+                self._cursor.connection.rollback()
+            except Exception:
+                pass
+            raise
 
     def executemany(self, sql, seq_of_params):
         self._cursor.executemany(_postgres_sql(sql), seq_of_params)
@@ -733,10 +746,16 @@ def _postgres_sql(sql):
     s = re.sub(r"SELECT\s+@@IDENTITY", "SELECT LASTVAL()", s, flags=re.I)
 
     # Access SELECT TOP n -> PostgreSQL LIMIT n.
-    m = re.search(r"\bSELECT\s+TOP\s+(\d+)\s+", s, flags=re.I | re.S)
+    # Também cobre SELECT DISTINCT TOP n.
+    m = re.search(
+        r"\bSELECT\s+(DISTINCT\s+)?TOP\s+(\d+)\s+",
+        s,
+        flags=re.I | re.S
+    )
     if m:
-        n = m.group(1)
-        s = s[:m.start()] + re.sub(r"\bSELECT\s+TOP\s+\d+\s+", "SELECT ", s[m.start():], count=1, flags=re.I)
+        distinct = m.group(1) or ""
+        n = m.group(2)
+        s = s[:m.start()] + "SELECT " + distinct + s[m.end():]
         semi = ";" if s.rstrip().endswith(";") else ""
         core = s.rstrip(";").rstrip()
         core += f" LIMIT {n}"
@@ -1323,7 +1342,7 @@ def get_connection():
 
 
 def scalar(cursor, sql, default=0, params=None):
-    """Executa uma consulta escalar, aceitando parâmetros opcionais."""
+    """Executa uma consulta escalar sem contaminar a transação em caso de erro."""
     try:
         if params is None:
             cursor.execute(sql)
@@ -1333,7 +1352,21 @@ def scalar(cursor, sql, default=0, params=None):
         if not row or row[0] is None:
             return default
         return row[0]
-    except Exception:
+    except Exception as exc:
+        # PostgreSQL aborta a transação quando uma consulta falha.
+        # Sem rollback, a próxima consulta recebe apenas:
+        # "current transaction is aborted".
+        try:
+            raw = getattr(cursor, "_cursor", None)
+            conn = getattr(raw, "connection", None)
+            if conn is not None:
+                conn.rollback()
+        except Exception:
+            pass
+        print("[SGFE-SCALAR-ERRO]", flush=True)
+        print(f"[SGFE-SCALAR-ERRO] sql={sql!r}", flush=True)
+        print(f"[SGFE-SCALAR-ERRO] params={params!r}", flush=True)
+        print(f"[SGFE-SCALAR-ERRO] erro={exc}", flush=True)
         return default
 
 
@@ -2016,53 +2049,48 @@ def logout():
 @app.route("/api/evento-geral")
 def api_evento_geral():
     """
-    PAINEL: leitura direta do PostgreSQL.
+    PAINEL SOMENTE.
 
-    Esta rota não usa get_connection(), porque get_connection() executa
-    rotinas de manutenção/compatibilidade antes de entregar a conexão.
-    Se uma dessas rotinas deixar a transação abortada, o Painel recebe
-    apenas "current transaction is aborted" e nem consegue ler os eventos.
+    V12 parte da versão V10, que preserva a correção do menu Atletas.
+    A única área alterada aqui é /api/evento-geral.
 
-    O menu Atletas não é alterado por esta correção.
+    No PostgreSQL, IDEvento está armazenado como character varying.
+    O erro anterior acontecia porque o Painel convertia o ID para inteiro
+    antes de usá-lo no WHERE IDEvento=?.
     """
     conn = None
     try:
-        if _is_postgres():
-            # O Painel administrativo lê public diretamente.
-            # Para fotógrafo, preserva o schema privado já usado pelo SGFE.
-            schema = "public"
-            if session.get("perfil") == "FOTOGRAFO" and session.get("fotografo_id"):
-                schema = _tenant_db_path(session["fotografo_id"])
-            conn = PostgreSQLCompatConnection(DATABASE_URL, schema=schema)
-        else:
-            conn = get_connection()
-
+        conn = get_connection()
         cur = conn.cursor()
 
-        # =====================================================
-        # 1. EVENTOS
-        # =====================================================
+        # -----------------------------------------------------
+        # 1) Lista de eventos
+        # -----------------------------------------------------
         cur.execute("""
             SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
             FROM tblEvento
             ORDER BY DataEvento DESC, NomeEvento
         """)
+
         eventos = []
         for r in cur.fetchall():
             eventos.append({
-                "id": access_int(r[0]),
+                "id": r[0],
                 "nome": str(r[1] or ""),
-                "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
+                "data": r[2].strftime("%d/%m/%Y")
+                        if hasattr(r[2], "strftime") else str(r[2] or ""),
                 "cidade": str(r[3] or ""),
                 "ativo": bool(r[4]) if r[4] is not None else False,
             })
 
-        evento_id_raw = request.args.get("evento", "").strip()
-        evento_id = (
-            access_int(evento_id_raw)
-            if evento_id_raw
-            else (eventos[0]["id"] if eventos else 0)
-        )
+        # -----------------------------------------------------
+        # 2) ID do evento selecionado
+        #    IMPORTANTE: mantém como texto para o PostgreSQL.
+        # -----------------------------------------------------
+        evento_id = request.args.get("evento", "").strip()
+
+        if not evento_id and eventos:
+            evento_id = str(eventos[0]["id"])
 
         resumo = {
             "agendamentos": 0,
@@ -2074,79 +2102,86 @@ def api_evento_geral():
             "despesas": 0.0,
             "lucro": 0.0,
         }
+
         evento_info = None
 
         if evento_id:
-            # =================================================
-            # 2. EVENTO SELECIONADO
-            # =================================================
+            # -------------------------------------------------
+            # 3) Evento selecionado
+            #    IDEvento recebe STRING, pois é varchar no PG.
+            # -------------------------------------------------
             cur.execute("""
                 SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
                 FROM tblEvento
                 WHERE IDEvento=?
-            """, [evento_id])
+            """, [str(evento_id)])
+
             r = cur.fetchone()
 
             if r:
                 evento_info = {
-                    "id": access_int(r[0]),
+                    "id": r[0],
                     "nome": str(r[1] or ""),
-                    "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
+                    "data": r[2].strftime("%d/%m/%Y")
+                            if hasattr(r[2], "strftime") else str(r[2] or ""),
                     "cidade": str(r[3] or ""),
                     "ativo": bool(r[4]) if r[4] is not None else False,
                 }
 
-                # =============================================
-                # 3. AGENDAMENTOS
-                # =============================================
-                cur.execute("""
-                    SELECT COUNT(*)
-                    FROM tblAgendamentos
-                    WHERE IDEvento=?
-                """, [evento_id])
-                row = cur.fetchone()
-                resumo["agendamentos"] = int(row[0] or 0) if row else 0
+                # -------------------------------------------------
+                # 4) AGENDAMENTOS
+                # -------------------------------------------------
+                resumo["agendamentos"] = int(scalar(
+                    cur,
+                    "SELECT Count(*) FROM tblAgendamentos WHERE IDEvento=?",
+                    0,
+                    [str(evento_id)]
+                ) or 0)
 
-                # =============================================
-                # 4. VENDAS / ENTREGAS
-                # =============================================
+                # -------------------------------------------------
+                # 5) VENDAS
+                # -------------------------------------------------
                 cur.execute("""
-                    SELECT IDVenda, ValorFinal, Finalizado, StatusPagamento
-                    FROM tblVendaPacotes
-                    WHERE IDEvento=?
-                """, [evento_id])
+                    SELECT V.IDVenda, V.ValorFinal, V.Finalizado,
+                           V.StatusPagamento
+                    FROM tblVendaPacotes AS V
+                    WHERE V.IDEvento=?
+                """, [str(evento_id)])
+
                 vendas_evento = cur.fetchall()
 
                 resumo["vendas"] = len(vendas_evento)
                 resumo["total_vendido"] = sum(
                     float(r[1] or 0) for r in vendas_evento
                 )
+
                 resumo["entregas_pendentes"] = sum(
                     1 for r in vendas_evento
                     if r[2] is None or not bool(r[2])
                 )
 
-                # =============================================
-                # 5. PAGAMENTOS
-                # =============================================
+                # -------------------------------------------------
+                # 6) PAGAMENTOS
+                # -------------------------------------------------
                 pagamentos = {}
+
                 cur.execute("""
-                    SELECT P.IDVenda, SUM(P.ValorPago)
+                    SELECT P.IDVenda, Sum(P.ValorPago)
                     FROM tblPagamento AS P
                     INNER JOIN tblVendaPacotes AS V
                         ON P.IDVenda=V.IDVenda
                     WHERE V.IDEvento=?
                     GROUP BY P.IDVenda
-                """, [evento_id])
+                """, [str(evento_id)])
 
                 for r in cur.fetchall():
-                    pagamentos[access_int(r[0])] = float(r[1] or 0)
+                    pagamentos[str(r[0])] = float(r[1] or 0)
 
                 recebido = 0.0
                 pendentes = 0
 
                 for r in vendas_evento:
-                    venda_id = access_int(r[0])
+                    venda_id = str(r[0])
                     valor = float(r[1] or 0)
                     status_pg = str(r[3] or "aberto").strip().lower()
                     pago = pagamentos.get(venda_id, 0.0)
@@ -2162,20 +2197,17 @@ def api_evento_geral():
                 resumo["total_recebido"] = recebido
                 resumo["pagamentos_pendentes"] = pendentes
 
-                # =============================================
-                # 6. DESPESAS
-                # =============================================
-                cur.execute("""
-                    SELECT SUM(ValorDespesa)
-                    FROM tblDespesasEvento
-                    WHERE IDEvento=?
-                """, [evento_id])
-                row = cur.fetchone()
-                resumo["despesas"] = money(row[0] if row else 0)
+                # -------------------------------------------------
+                # 7) DESPESAS
+                # -------------------------------------------------
+                resumo["despesas"] = money(scalar(
+                    cur,
+                    "SELECT Sum(ValorDespesa) "
+                    "FROM tblDespesasEvento WHERE IDEvento=?",
+                    0,
+                    [str(evento_id)]
+                ))
 
-                # =============================================
-                # 7. LUCRO
-                # =============================================
                 resumo["lucro"] = (
                     resumo["total_recebido"] - resumo["despesas"]
                 )
@@ -2184,23 +2216,22 @@ def api_evento_geral():
             "ok": True,
             "eventos": eventos,
             "evento": evento_info,
-            "resumo": resumo,
+            "resumo": resumo
         })
 
     except Exception as e:
-        if conn:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-
         print("[SGFE-PAINEL-ERRO]", flush=True)
-        print(f"[SGFE-PAINEL-ERRO] rota=/api/evento-geral", flush=True)
-        print(f"[SGFE-PAINEL-ERRO] erro={e}", flush=True)
+        print(f"[SGFE-PAINEL-ERRO] {e}", flush=True)
+
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
 
         return jsonify({
             "ok": False,
-            "erro": str(e),
+            "erro": str(e)
         }), 500
 
     finally:
