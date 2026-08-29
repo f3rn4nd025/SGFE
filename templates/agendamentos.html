@@ -65,8 +65,7 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 .main > .new-card{display:block;box-sizing:border-box;width:100%;}
 .main > .new-card > form.grid{display:grid;grid-template-columns:minmax(280px,1.4fr) minmax(280px,1fr) minmax(180px,1fr);width:100%;box-sizing:border-box;}
 
-/* AGENDAMENTOS: apenas organização das colunas e ações.
-   A tabela permanece dentro da largura da tela. */
+/* AGENDAMENTOS: somente organização visual da tabela. */
 .table-wrap.agendamentos-wrap {
     width: 100%;
     max-width: 100%;
@@ -89,36 +88,18 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
     overflow-wrap: anywhere;
     vertical-align: middle;
 }
-.table.agendamentos-table th:nth-child(1),
-.table.agendamentos-table td:nth-child(1) { width: 7%; }
-.table.agendamentos-table th:nth-child(2),
-.table.agendamentos-table td:nth-child(2) { width: 9%; }
-.table.agendamentos-table th:nth-child(3),
-.table.agendamentos-table td:nth-child(3) { width: 13%; }
-.table.agendamentos-table th:nth-child(4),
-.table.agendamentos-table td:nth-child(4) { width: 15%; }
-.table.agendamentos-table th:nth-child(5),
-.table.agendamentos-table td:nth-child(5) { width: 9%; }
-.table.agendamentos-table th:nth-child(6),
-.table.agendamentos-table td:nth-child(6) { width: 8%; }
-.table.agendamentos-table th:nth-child(7),
-.table.agendamentos-table td:nth-child(7) { width: 8%; }
-.table.agendamentos-table th:nth-child(8),
-.table.agendamentos-table td:nth-child(8) { width: 11%; }
-.table.agendamentos-table th:nth-child(9),
-.table.agendamentos-table td:nth-child(9) { width: 8%; }
-.table.agendamentos-table th:nth-child(10),
-.table.agendamentos-table td:nth-child(10) {
-    width: 12%;
-    white-space: normal !important;
-}
-.table.agendamentos-table td:nth-child(10) {
-    overflow: visible !important;
-}
-.table.agendamentos-table td:nth-child(10) .row-action {
+.table.agendamentos-table th:nth-child(1), .table.agendamentos-table td:nth-child(1) { width: 8%; }
+.table.agendamentos-table th:nth-child(2), .table.agendamentos-table td:nth-child(2) { width: 11%; }
+.table.agendamentos-table th:nth-child(3), .table.agendamentos-table td:nth-child(3) { width: 18%; }
+.table.agendamentos-table th:nth-child(4), .table.agendamentos-table td:nth-child(4) { width: 10%; }
+.table.agendamentos-table th:nth-child(5), .table.agendamentos-table td:nth-child(5) { width: 9%; }
+.table.agendamentos-table th:nth-child(6), .table.agendamentos-table td:nth-child(6) { width: 10%; }
+.table.agendamentos-table th:nth-child(7), .table.agendamentos-table td:nth-child(7) { width: 9%; }
+.table.agendamentos-table th:nth-child(8), .table.agendamentos-table td:nth-child(8) { width: 25%; }
+.table.agendamentos-table td:nth-child(8) { overflow: visible !important; }
+.table.agendamentos-table td:nth-child(8) .row-action {
     display: inline-block;
-    margin: 2px 2px 2px 0;
-    max-width: 100%;
+    margin: 2px 3px 2px 0;
     box-sizing: border-box;
     white-space: nowrap;
 }
@@ -266,13 +247,13 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 <div class="table-wrap agendamentos-wrap">
 <table class="table agendamentos-table">
 <thead><tr>
-<th>AGENDAMENTO</th><th>DATA</th><th>ATLETA</th><th>EVENTO</th><th>DATA EVENTO</th><th>CIDADE</th><th>STATUS</th><th>OBSERVAÇÕES</th><th>AVISO</th><th>AÇÃO</th>
+<th>DATA</th><th>ATLETA</th><th>EVENTO</th><th>DATA EVENTO</th><th>CIDADE</th><th>STATUS</th><th>AVISO</th><th>AÇÃO</th>
 </tr></thead>
 <tbody>
 {% for r in data %}
 <tr>
-<td>#{{ r.IDAgendamento }}</td><td>{{ r.DataAgendamento }}</td><td>{{ r.Atleta }}</td><td>{{ r.Evento }}</td><td>{{ r.DataEvento }}</td><td>{{ r.Cidade }}</td>
-<td><span class="pill {% if 'CANCEL' not in r.Status|upper %}ok{% endif %}">{{ r.Status }}</span></td><td>{{ r.Observacoes }}</td>
+<td>{{ r.DataAgendamento }}</td><td>{{ r.Atleta }}</td><td>{{ r.Evento }}</td><td>{{ r.DataEvento }}</td><td>{{ r.Cidade }}</td>
+<td><span class="pill {% if 'CANCEL' not in (r.Status or '')|upper %}ok{% endif %}">{{ r.Status or 'AGENDADO' }}</span></td>
 <td>
 {% if r.Telefone %}
 <a class="row-action whatsapp" target="_blank" rel="noopener"
@@ -282,13 +263,13 @@ href="https://wa.me/{{ r.Telefone|replace('(','')|replace(')','')|replace('-',''
 {% endif %}
 </td>
 <td>{% if r.IDAgendamento %}
-{% if r.BalizamentoArquivo %}<a class="row-action" style="border-color:#f5d547;color:#f5d547" href="/agendamentos/{{ r.IDAgendamento }}/balizamento">🏊 BALIZAMENTO</a>{% else %}<a class="row-action" style="border-color:#7d9798;color:#7d9798" href="/eventos/{{ r.IDEvento }}/balizamento" title="Este evento ainda não possui balizamento anexado">📎 ANEXAR BALIZAMENTO</a>{% endif %}
+<a class="row-action" style="border-color:#f5d547;color:#f5d547" href="/agendamentos/{{ r.IDAgendamento }}/balizamento">🏊 BALIZAMENTO</a>
 <a class="row-action" style="border-color:#12d8de;color:#12d8de" href="/agendamentos/{{ r.IDAgendamento }}/venda">💰 GERAR VENDA</a>
 <form method="post" action="/agendamentos/{{ r.IDAgendamento }}/excluir" style="display:inline" onsubmit="return confirm('Excluir este agendamento? Esta ação não poderá ser desfeita.');">
 <button type="submit" class="row-action btn-danger">EXCLUIR</button>
 </form>{% endif %}</td>
 </tr>
-{% else %}<tr><td colspan="10" class="empty">Nenhum agendamento encontrado com esses filtros.</td></tr>{% endfor %}
+{% else %}<tr><td colspan="8" class="empty">Nenhum agendamento encontrado com esses filtros.</td></tr>{% endfor %}
 </tbody></table>
 </div></div>
 </main></div></div>
