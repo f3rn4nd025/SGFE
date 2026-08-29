@@ -3315,12 +3315,26 @@ def web_agendamentos():
                             "para este evento."
                         )
 
+                # IDAgendamento não possui geração automática no PostgreSQL.
+                # Gera o próximo ID preservando os registros existentes.
+                cur.execute("""
+                    SELECT COALESCE(MAX(idagendamento), 0) + 1
+                    FROM tblagendamentos
+                """)
+                novo_id_agendamento = int(cur.fetchone()[0])
+
                 cur.execute("""
                     INSERT INTO tblagendamentos
-                    (dataagendamento, idcliente, idevento,
+                    (idagendamento, dataagendamento, idcliente, idevento,
                      idstatusagendamento, observacoes, ultimaatualizacao)
-                    VALUES (CURRENT_TIMESTAMP,%s,%s,%s,%s,CURRENT_TIMESTAMP)
-                """, (id_cliente_int, id_evento_int, id_status, observacoes))
+                    VALUES (%s,CURRENT_TIMESTAMP,%s,%s,%s,%s,CURRENT_TIMESTAMP)
+                """, (
+                    novo_id_agendamento,
+                    id_cliente_int,
+                    id_evento_int,
+                    id_status,
+                    observacoes,
+                ))
 
                 conn.commit()
                 mensagem = "Agendamento realizado com sucesso."
