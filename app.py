@@ -4264,7 +4264,24 @@ def web_vendas():
         # Isso evita que IDs antigos migrados do Access (bytes/caracteres
         # binários) quebrem os LEFT JOINs.
         cur.execute("SELECT IDCliente, Nome FROM tblClientes")
-        cliente_map = {_num(r[0]): _txt(r[1]) for r in cur.fetchall()}
+        cliente_map = {}
+        for r in cur.fetchall():
+            cid = _num(r[0])
+            nome = _txt(r[1]).strip()
+            if cid and nome:
+                cliente_map[cid] = nome
+
+        # Algumas vendas antigas podem ter o IDCliente inconsistente após a
+        # migração, mas ainda possuem o IDAgendamento correto. Como a venda
+        # nasce do agendamento, usamos esse vínculo como segunda fonte para
+        # localizar o atleta. Isso corrige somente a exibição da listagem.
+        cur.execute("SELECT IDAgendamento, IDCliente FROM tblAgendamentos")
+        agendamento_cliente_map = {}
+        for r in cur.fetchall():
+            aid = _num(r[0])
+            cid = _num(r[1])
+            if aid:
+                agendamento_cliente_map[aid] = cid
 
         cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
         status_map = {_num(r[0]): _txt(r[1]) for r in cur.fetchall()}
@@ -4301,6 +4318,18 @@ def web_vendas():
                 continue
 
             atleta = cliente_map.get(cliente_id, "")
+
+            # Fallback seguro: se o IDCliente da venda não localizar o nome,
+            # tenta o IDAgendamento da própria venda. Não altera banco nem
+            # outras telas, apenas recupera o nome correto para a listagem.
+            id_agendamento = _num(r[9])
+            if not atleta and id_agendamento:
+                cliente_id_ag = agendamento_cliente_map.get(id_agendamento, 0)
+                if cliente_id_ag:
+                    atleta = cliente_map.get(cliente_id_ag, "")
+                    if atleta:
+                        cliente_id = cliente_id_ag
+
             evento_nome = evento_map.get(evento_id, {}).get("nome", "")
             status_nome = status_map.get(status_id, "")
 
@@ -4341,7 +4370,7 @@ def web_vendas():
                 "Status": status_nome,
                 "status": status_nome,
                 "IDStatusVenda": status_id,
-                "IDAgendamento": _num(r[9]),
+                "IDAgendamento": id_agendamento,
                 "Finalizado": finalizado,
                 "finalizado": finalizado,
                 "DataFinalizacao": _txt(r[11]),
