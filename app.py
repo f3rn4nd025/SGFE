@@ -4253,7 +4253,7 @@ def web_vendas():
             V.DataFinalizacao
         FROM (((tblVendaPacotes AS V
         LEFT JOIN tblClientes AS C ON CAST(V.IDCliente AS TEXT)=CAST(C.IDCliente AS TEXT))
-        LEFT JOIN tblEvento AS E ON get_byte(V.IDEvento, 0)=CAST(E.IDEvento AS INTEGER))
+        LEFT JOIN tblEvento AS E ON (CASE WHEN V.IDEvento ~ '^[0-9]+$' THEN CAST(V.IDEvento AS INTEGER) ELSE ASCII(SUBSTRING(V.IDEvento,1,1)) END)=CAST(E.IDEvento AS INTEGER))
         LEFT JOIN tblStatusVenda AS S ON CAST(V.IDStatusVenda AS TEXT)=CAST(S.IDStatusVenda AS TEXT))
         """
 
@@ -4264,7 +4264,7 @@ def web_vendas():
             # IDEvento no PostgreSQL é texto.
             # Mantemos a mesma lógica do sistema: a venda pertence ao evento
             # gravado em tblVendaPacotes.IDEvento.
-            where.append("get_byte(V.IDEvento, 0)=?")
+            where.append("(CASE WHEN V.IDEvento ~ '^[0-9]+$' THEN CAST(V.IDEvento AS INTEGER) ELSE ASCII(SUBSTRING(V.IDEvento,1,1)) END)=?")
             params.append(int(evento_selecionado))
 
         if search:
