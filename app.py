@@ -4251,9 +4251,10 @@ def web_vendas():
             V.IDAgendamento,
             V.Finalizado,
             V.DataFinalizacao
-        FROM (((tblVendaPacotes AS V
+        FROM ((((tblVendaPacotes AS V
         LEFT JOIN tblClientes AS C ON CAST(V.IDCliente AS TEXT)=CAST(C.IDCliente AS TEXT))
         LEFT JOIN tblEvento AS E ON CAST(V.IDEvento AS TEXT)=CAST(E.IDEvento AS TEXT))
+        LEFT JOIN tblAgendamentos AS A ON CAST(V.IDAgendamento AS TEXT)=CAST(A.IDAgendamento AS TEXT))
         LEFT JOIN tblStatusVenda AS S ON CAST(V.IDStatusVenda AS TEXT)=CAST(S.IDStatusVenda AS TEXT))
         """
 
@@ -4264,8 +4265,8 @@ def web_vendas():
             # IDEvento no PostgreSQL é texto.
             # Mantemos a mesma lógica do sistema: a venda pertence ao evento
             # gravado em tblVendaPacotes.IDEvento.
-            where.append("CAST(V.IDEvento AS TEXT) = CAST(? AS TEXT)")
-            params.append(str(evento_selecionado))
+            where.append("(CAST(V.IDEvento AS TEXT) = CAST(? AS TEXT) OR CAST(A.IDEvento AS TEXT) = CAST(? AS TEXT))")
+            params.extend([str(evento_selecionado), str(evento_selecionado)])
 
         if search:
             where.append("""
