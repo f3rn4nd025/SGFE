@@ -4380,6 +4380,7 @@ def web_vendas():
         sql = """
         SELECT
             V.IDVenda,
+            V.IDEvento AS _FiltroEvento,
             V.DataVenda,
             C.Nome AS Atleta,
             E.NomeEvento AS Evento,
@@ -4397,36 +4398,30 @@ def web_vendas():
         LEFT JOIN tblStatusVenda AS S ON CAST(V.IDStatusVenda AS TEXT)=CAST(S.IDStatusVenda AS TEXT))
         """
 
-        where = []
-        params = []
-
-        if evento_selecionado:
-            # PostgreSQL: IDEvento está como character varying.
-            # Mantemos o valor do filtro comparando texto com texto.
-            # Esta é a única correção desta versão na tela Vendas/Pacotes.
-            where.append("TRIM(CAST(V.IDEvento AS TEXT))=TRIM(CAST(? AS TEXT))")
-            params.append(str(evento_selecionado))
-
-        if search:
-            where.append("""
-                (C.Nome LIKE ?
-                 OR E.NomeEvento LIKE ?
-                 OR S.StatusVenda LIKE ?)
-            """)
-            like = "%" + search + "%"
-            params.extend([like, like, like])
-
-        if where:
-            sql += " WHERE " + " AND ".join(where)
-
+        # IMPORTANTE: não filtramos IDEvento no SQL.
+        # O banco publicado pode ter IDEvento como texto, inteiro ou valor
+        # vindo do Access em representação binária. Nesse caso uma comparação
+        # SQL aparentemente simples pode eliminar as vendas mesmo quando elas
+        # pertencem ao evento correto. Buscamos as vendas e normalizamos o ID
+        # em Python, preservando a compatibilidade com os dados já gravados.
         sql += " ORDER BY V.IDVenda DESC"
 
-        cur.execute(sql, params)
+        cur.execute(sql)
         columns = [d[0] for d in cur.description]
         data = []
         for row in cur.fetchall():
             item = {}
+            evento_da_venda = 0
+            texto_busca = []
             for col, value in zip(columns, row):
+                if col == "_FiltroEvento":
+                    try:
+                        evento_da_venda = access_int(value)
+                    except Exception:
+                        evento_da_venda = 0
+                    continue
+
+                original_value = value
                 if hasattr(value, "strftime"):
                     value = value.strftime("%d/%m/%Y")
                 elif value is None:
@@ -4434,6 +4429,18 @@ def web_vendas():
                 else:
                     value = str(value)
                 item[col] = value
+                texto_busca.append(str(original_value or ""))
+
+            # Filtro por evento feito após a normalização do ID.
+            if evento_selecionado and evento_da_venda != evento_selecionado:
+                continue
+
+            # Pesquisa por atleta, evento ou status, sem alterar a listagem.
+            if search:
+                termo = search.casefold()
+                if not any(termo in t.casefold() for t in texto_busca):
+                    continue
+
             data.append(item)
 
     except Exception as e:
