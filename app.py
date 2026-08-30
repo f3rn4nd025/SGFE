@@ -4207,94 +4207,160 @@ def web_vendas():
     conn = get_connection()
     eventos = []
     evento_selecionado = 0
+    data = []
+    columns = [
+        "IDVenda", "DataVenda", "Atleta", "Evento", "QtdProvas",
+        "ValorPacote", "ValorDesconto", "ValorFinal", "Status",
+        "Finalizado", "DataFinalizacao"
+    ]
+
+    def _txt(v):
+        if v is None:
+            return ""
+        if hasattr(v, "strftime"):
+            return v.strftime("%d/%m/%Y")
+        return str(v)
+
+    def _num(v):
+        try:
+            return access_int(v)
+        except Exception:
+            return 0
 
     try:
         cur = conn.cursor()
 
-        # Eventos em ordem do mais recente para o mais antigo.
+        # Eventos. Os IDs são normalizados em Python, exatamente como na
+        # listagem de ATLETAS, sem tentar fazer conversões do Access dentro
+        # do SQL do PostgreSQL.
         cur.execute("""
             SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
             FROM tblEvento
             ORDER BY DataEvento DESC, IDEvento DESC
         """)
+        evento_map = {}
         for r in cur.fetchall():
-            eventos.append({
-                "id": access_int(r[0]),
-                "nome": str(r[1] or ""),
-                "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
-                "cidade": str(r[3] or ""),
+            eid = _num(r[0])
+            evento_map[eid] = {
+                "id": eid,
+                "nome": _txt(r[1]),
+                "data": _txt(r[2]),
+                "cidade": _txt(r[3]),
                 "ativo": bool(r[4]) if r[4] is not None else False,
-            })
+            }
+        eventos = list(evento_map.values())
 
-        # Sem escolha do usuário, sempre começa no último evento.
         if evento_param:
             try:
-                candidato = access_int(evento_param)
+                candidato = _num(evento_param)
             except Exception:
                 candidato = 0
-            if any(e["id"] == candidato for e in eventos):
+            if candidato in evento_map:
                 evento_selecionado = candidato
         elif eventos:
             evento_selecionado = eventos[0]["id"]
 
-        sql = """
-        SELECT
-            V.IDVenda,
-            V.DataVenda,
-            C.Nome AS Atleta,
-            E.NomeEvento AS Evento,
-            V.QtdProvas,
-            V.ValorPacote,
-            V.ValorDesconto,
-            V.ValorFinal,
-            S.StatusVenda AS Status,
-            V.IDAgendamento,
-            V.Finalizado,
-            V.DataFinalizacao
-        FROM (((tblVendaPacotes AS V
-        LEFT JOIN tblClientes AS C ON CAST(V.IDCliente AS TEXT)=CAST(C.IDCliente AS TEXT))
-        LEFT JOIN tblEvento AS E ON (CASE WHEN V.IDEvento ~ '^[0-9]+$' THEN CAST(V.IDEvento AS INTEGER) ELSE ASCII(SUBSTRING(V.IDEvento,1,1)) END)=CAST(E.IDEvento AS INTEGER))
-        LEFT JOIN tblStatusVenda AS S ON CAST(V.IDStatusVenda AS TEXT)=CAST(S.IDStatusVenda AS TEXT))
-        """
+        # Clientes e status também são carregados e normalizados em Python.
+        # Isso evita que IDs antigos migrados do Access (bytes/caracteres
+        # binários) quebrem os LEFT JOINs.
+        cur.execute("SELECT IDCliente, Nome FROM tblClientes")
+        cliente_map = {_num(r[0]): _txt(r[1]) for r in cur.fetchall()}
 
-        where = []
-        params = []
+        cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
+        status_map = {_num(r[0]): _txt(r[1]) for r in cur.fetchall()}
 
-        if evento_selecionado:
-            # IDEvento no PostgreSQL é texto.
-            # Mantemos a mesma lógica do sistema: a venda pertence ao evento
-            # gravado em tblVendaPacotes.IDEvento.
-            where.append("(CASE WHEN V.IDEvento ~ '^[0-9]+$' THEN CAST(V.IDEvento AS INTEGER) ELSE ASCII(SUBSTRING(V.IDEvento,1,1)) END)=?")
-            params.append(int(evento_selecionado))
+        # A venda é lida diretamente, sem JOIN por IDs. A mesma estratégia
+        # usada na tela de ATLETAS é aplicada aqui: ler por posição e depois
+        # montar aliases para o template.
+        cur.execute("""
+            SELECT
+                IDVenda,
+                DataVenda,
+                IDCliente,
+                IDEvento,
+                QtdProvas,
+                ValorPacote,
+                ValorDesconto,
+                ValorFinal,
+                IDStatusVenda,
+                IDAgendamento,
+                Finalizado,
+                DataFinalizacao
+            FROM tblVendaPacotes
+            ORDER BY IDVenda DESC
+        """)
 
-        if search:
-            where.append("""
-                (C.Nome LIKE ?
-                 OR E.NomeEvento LIKE ?
-                 OR S.StatusVenda LIKE ?)
-            """)
-            like = "%" + search + "%"
-            params.extend([like, like, like])
+        for r in cur.fetchall():
+            venda_id = _num(r[0])
+            cliente_id = _num(r[2])
+            evento_id = _num(r[3])
+            status_id = _num(r[8])
 
-        if where:
-            sql += " WHERE " + " AND ".join(where)
+            # Mantém o filtro por evento exatamente como no sistema local.
+            if evento_selecionado and evento_id != evento_selecionado:
+                continue
 
-        sql += " ORDER BY V.IDVenda DESC"
+            atleta = cliente_map.get(cliente_id, "")
+            evento_nome = evento_map.get(evento_id, {}).get("nome", "")
+            status_nome = status_map.get(status_id, "")
 
-        cur.execute(sql, params)
-        columns = [d[0] for d in cur.description]
-        data = []
-        for row in cur.fetchall():
-            item = {}
-            for col, value in zip(columns, row):
-                if hasattr(value, "strftime"):
-                    value = value.strftime("%d/%m/%Y")
-                elif value is None:
-                    value = ""
-                else:
-                    value = str(value)
-                item[col] = value
+            qtd = _num(r[4])
+            valor_pacote = r[5] if r[5] is not None else 0
+            valor_desconto = r[6] if r[6] is not None else 0
+            valor_final = r[7] if r[7] is not None else 0
+            finalizado = r[10]
+
+            # Aliases em maiúsculo e minúsculo para manter compatibilidade
+            # com o template atual, sem alterar o template nem outras telas.
+            item = {
+                "IDVenda": venda_id,
+                "id": venda_id,
+                "OS": venda_id,
+                "os": venda_id,
+                "DataVenda": _txt(r[1]),
+                "Data": _txt(r[1]),
+                "data": _txt(r[1]),
+                "Atleta": atleta,
+                "atleta": atleta,
+                "Nome": atleta,
+                "nome": atleta,
+                "Evento": evento_nome,
+                "evento": evento_nome,
+                "NomeEvento": evento_nome,
+                "QtdProvas": qtd,
+                "Provas": qtd,
+                "provas": qtd,
+                "ValorPacote": valor_pacote,
+                "Pacote": valor_pacote,
+                "pacote": valor_pacote,
+                "ValorDesconto": valor_desconto,
+                "Desconto": valor_desconto,
+                "desconto": valor_desconto,
+                "ValorFinal": valor_final,
+                "valor_final": valor_final,
+                "Status": status_nome,
+                "status": status_nome,
+                "IDStatusVenda": status_id,
+                "IDAgendamento": _num(r[9]),
+                "Finalizado": finalizado,
+                "finalizado": finalizado,
+                "DataFinalizacao": _txt(r[11]),
+                "data_finalizacao": _txt(r[11]),
+            }
+
+            if search:
+                alvo = " ".join([
+                    str(atleta), str(evento_nome), str(status_nome),
+                    str(venda_id), str(qtd)
+                ]).lower()
+                if search.lower() not in alvo:
+                    continue
+
             data.append(item)
+
+        print(f"[SGFE-VENDAS] evento_selecionado={evento_selecionado} vendas_exibidas={len(data)}")
+        if data:
+            print(f"[SGFE-VENDAS] primeira_venda={data[0].get('IDVenda')} atleta={data[0].get('Atleta')} evento={data[0].get('Evento')}")
 
     except Exception as e:
         try:
@@ -4302,8 +4368,8 @@ def web_vendas():
         except Exception:
             pass
         erro = str(e)
-        columns = locals().get("columns", [])
-        data = locals().get("data", [])
+        data = []
+        print(f"[SGFE-VENDAS] ERRO_LISTAGEM={e}")
     finally:
         conn.close()
 
