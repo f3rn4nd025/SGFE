@@ -4264,7 +4264,7 @@ def web_vendas():
             # IDEvento no PostgreSQL é texto.
             # Mantemos a mesma lógica do sistema: a venda pertence ao evento
             # gravado em tblVendaPacotes.IDEvento.
-            where.append("V.IDEvento=?")
+            where.append("TRIM(CAST(V.IDEvento AS TEXT)) = TRIM(CAST(? AS TEXT))")
             params.append(str(evento_selecionado))
 
         if search:
