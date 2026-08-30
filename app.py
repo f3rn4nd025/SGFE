@@ -4222,8 +4222,66 @@ def web_vendas():
         return str(v)
 
     def _num(v):
+        """Normaliza IDs somente nesta tela, incluindo bytea/memoryview migrado."""
+        if v is None:
+            return 0
+
+        # psycopg2 pode devolver BYTEA como bytes ou memoryview.
+        if isinstance(v, memoryview):
+            v = v.tobytes()
+
+        if isinstance(v, (bytes, bytearray)):
+            raw = bytes(v).rstrip(b"\\x00")
+            if not raw:
+                return 0
+
+            # Bytea textual/hex, caso algum registro tenha sido importado
+            # como texto em vez de BYTEA nativo.
+            try:
+                txt = raw.decode("ascii").strip()
+                if txt.isdigit():
+                    return int(txt)
+                if txt.lower().startswith("\\x"):
+                    hx = txt[2:]
+                    if hx and len(hx) % 2 == 0:
+                        return int.from_bytes(bytes.fromhex(hx), "little", signed=False)
+            except Exception:
+                pass
+
+            # IDs antigos do Access gravados em binário.
+            return int.from_bytes(raw, byteorder="little", signed=False)
+
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return 0
+
+            try:
+                return int(s)
+            except Exception:
+                pass
+
+            # PostgreSQL pode entregar um BYTEA textual como "\\x08".
+            if s.lower().startswith("\\x"):
+                try:
+                    hx = s[2:]
+                    if hx and len(hx) % 2 == 0:
+                        return int.from_bytes(bytes.fromhex(hx), "little", signed=False)
+                except Exception:
+                    pass
+
+            # String contendo os bytes binários já decodificados.
+            try:
+                raw = s.encode("latin1").rstrip(b"\\x00")
+                if raw:
+                    return int.from_bytes(raw, byteorder="little", signed=False)
+            except Exception:
+                pass
+
+            return 0
+
         try:
-            return access_int(v)
+            return int(v)
         except Exception:
             return 0
 
