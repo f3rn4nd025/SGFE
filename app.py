@@ -2915,163 +2915,7 @@ def gerenciar_balizamento_evento(evento_id):
 
 @app.route("/agendamentos/<int:agendamento_id>/balizamento")
 def balizamento_agendamento(agendamento_id):
-    """Abre balizamento.html mostrando as provas do atleta agendado."""
-    # No PostgreSQL, esta tela usa conexão direta para não passar pela
-    # camada de compatibilidade que estava causando o 500 ao clicar no botão.
-    if _is_postgres():
-        conn = None
-        try:
-            if not DATABASE_URL:
-                return "DATABASE_URL não foi configurada no Render.", 500
-
-            schema = "public"
-            if session.get("perfil") == "FOTOGRAFO" and session.get("fotografo_id"):
-                schema = _tenant_db_path(session["fotografo_id"])
-
-            conn = psycopg2.connect(DATABASE_URL, connect_timeout=15)
-            cur = conn.cursor()
-            if schema == "public":
-                cur.execute('SET search_path TO "public"')
-            else:
-                cur.execute(f'SET search_path TO "{schema}", "public"')
-
-            cur.execute("""
-                SELECT a.idagendamento, a.idcliente, c.nome AS atleta,
-                       a.idevento, e.nomeevento, e.dataevento,
-                       COALESCE(e.balizamentoarquivo,'') AS balizamentoarquivo
-                FROM tblagendamentos a
-                LEFT JOIN tblclientes c ON a.idcliente::text=c.idcliente::text
-                LEFT JOIN tblevento e ON a.idevento::text=e.idevento::text
-                WHERE a.idagendamento::text=%s::text
-                LIMIT 1
-            """, (agendamento_id,))
-            r = cur.fetchone()
-            if not r:
-                return "Agendamento não encontrado", 404
-
-            info = {
-                "id": access_int(r[0]),
-                "cliente_id": access_int(r[1]),
-                "atleta": str(r[2] or ""),
-                "evento_id": access_int(r[3]),
-                "evento": str(r[4] or ""),
-                "data_evento": r[5].strftime("%d/%m/%Y") if hasattr(r[5], "strftime") else str(r[5] or ""),
-                "arquivo": str(r[6] or "")
-            }
-
-            if not info["arquivo"]:
-                return redirect(url_for("web_agendamentos", erro="Este evento ainda não possui balizamento anexado."))
-
-            cur.execute("""
-                SELECT idbalizamento, numeroprova, nomeprova, numeroserie,
-                       raia, nomeatleta, registro, pagina
-                FROM tblbalizamentoprovas
-                WHERE idevento::text=%s::text
-                  AND nomeatleta ILIKE %s
-                ORDER BY numeroprova, numeroserie, raia
-            """, (info["evento_id"], "%" + info["atleta"] + "%"))
-
-            ocorrencias = []
-            nome_norm = _normalizar_nome(info["atleta"])
-            for row in cur.fetchall():
-                if _normalizar_nome(row[5]) != nome_norm:
-                    continue
-                ocorrencias.append({
-                    "id": access_int(row[0]),
-                    "prova": access_int(row[1]),
-                    "nome_prova": str(row[2] or ""),
-                    "serie": access_int(row[3]),
-                    "raia": access_int(row[4]),
-                    "nome_atleta": str(row[5] or ""),
-                    "registro": str(row[6] or ""),
-                    "pagina": access_int(row[7])
-                })
-
-            marcadas = {}
-            try:
-                cur.execute("""
-                    SELECT idmarcacao, numeroprova, numeroserie, raia, cor, nomeprova
-                    FROM tblmarcacaobalizamento
-                    WHERE idevento::text=%s::text
-                      AND idcliente::text=%s::text
-                      AND ativa=TRUE
-                """, (info["evento_id"], info["cliente_id"]))
-                for m in cur.fetchall():
-                    marcadas[access_int(m[1])] = {
-                        "id_marcacao": access_int(m[0]),
-                        "serie": access_int(m[2]),
-                        "raia": access_int(m[3]),
-                        "cor": str(m[4] or "amarelo"),
-                        "nome_prova": str(m[5] or "")
-                    }
-            except Exception:
-                conn.rollback()
-                marcadas = {}
-
-            manuais = []
-            try:
-                cur.execute("""
-                    SELECT idmanual, numeroprova, nomeprova, numeroserie, raia
-                    FROM tblbalizamentomanualprovas
-                    WHERE idevento::text=%s::text
-                      AND idcliente::text=%s::text
-                      AND idagendamento::text=%s::text
-                      AND ativa=TRUE
-                    ORDER BY numeroprova, numeroserie, raia
-                """, (info["evento_id"], info["cliente_id"], info["id"]))
-                manuais = cur.fetchall()
-            except Exception:
-                conn.rollback()
-                manuais = []
-
-            if not ocorrencias and not manuais:
-                return render_template("manual_balizamento.html", info=info)
-
-            provas_oficiais = {item["prova"] for item in ocorrencias}
-            for item in ocorrencias:
-                item["marcada"] = item["prova"] in marcadas and marcadas[item["prova"]]["serie"] == item["serie"]
-                item["marcacao"] = marcadas.get(item["prova"], {})
-                item["manual"] = False
-
-            for m in manuais:
-                prova = access_int(m[1])
-                if prova in provas_oficiais:
-                    continue
-                serie = access_int(m[3])
-                marcacao = marcadas.get(prova, {})
-                ocorrencias.append({
-                    "id": 0,
-                    "prova": prova,
-                    "nome_prova": str(m[2] or "PROVA MANUAL"),
-                    "serie": serie,
-                    "raia": access_int(m[4] or 0),
-                    "nome_atleta": info["atleta"],
-                    "registro": "",
-                    "pagina": 0,
-                    "marcada": prova in marcadas and access_int(marcadas[prova].get("serie") or 0) == serie,
-                    "marcacao": marcacao,
-                    "manual": True
-                })
-
-            ocorrencias.sort(key=lambda x: (
-                access_int(x.get("prova")),
-                access_int(x.get("serie")),
-                access_int(x.get("raia"))
-            ))
-            return render_template("balizamento.html", info=info, ocorrencias=ocorrencias, marcadas=marcadas)
-        except Exception as e:
-            if conn:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-            print(f"[SGFE-BALIZAMENTO-ATLETA] {e}", flush=True)
-            return f"Erro ao abrir o balizamento do atleta: {e}", 500
-        finally:
-            if conn:
-                conn.close()
-
-    # SQLite/Access: mantém o fluxo original.
+    """Mostra somente as provas do atleta encontradas no balizamento do evento."""
     conn = get_connection()
     try:
         cur = conn.cursor()
@@ -3113,12 +2957,12 @@ def balizamento_agendamento(agendamento_id):
                 "registro": str(row[6] or ""), "pagina": access_int(row[7])
             })
 
-        marcadas = {}
         cur.execute("""
             SELECT IDMarcacao, NumeroProva, NumeroSerie, Raia, Cor, NomeProva
             FROM tblMarcacaoBalizamento
             WHERE IDEvento=? AND IDCliente=? AND Ativa=True
         """, [info["evento_id"], info["cliente_id"]])
+        marcadas = {}
         for m in cur.fetchall():
             marcadas[access_int(m[1])] = {
                 "id_marcacao": access_int(m[0]), "serie": access_int(m[2]), "raia": access_int(m[3]),
@@ -3126,6 +2970,10 @@ def balizamento_agendamento(agendamento_id):
             }
 
         _ensure_balizamento_manual(conn)
+
+        # Se o atleta não foi encontrado no balizamento oficial, primeiro abre
+        # a tela separada para o operador DEFINIR as provas. Só depois da
+        # confirmação essas provas aparecem na tela de marcação.
         cur.execute("""
             SELECT IDManual, NumeroProva, NomeProva, NumeroSerie, Raia
             FROM tblBalizamentoManualProvas
@@ -3138,26 +2986,38 @@ def balizamento_agendamento(agendamento_id):
             return render_template("manual_balizamento.html", info=info)
 
         provas_oficiais = {item["prova"] for item in ocorrencias}
+
         for item in ocorrencias:
             item["marcada"] = item["prova"] in marcadas and marcadas[item["prova"]]["serie"] == item["serie"]
             item["marcacao"] = marcadas.get(item["prova"], {})
             item["manual"] = False
 
+        # Provas definidas manualmente entram na tela de marcação como
+        # ocorrências normais. Elas só viram uma marcação quando o operador
+        # clicar em MARCAR.
         for m in manuais:
             prova = access_int(m[1])
             if prova in provas_oficiais:
                 continue
             serie = access_int(m[3])
             marcacao = marcadas.get(prova, {})
+            marcada = prova in marcadas and access_int(marcadas[prova].get("serie") or 0) == serie
             ocorrencias.append({
-                "id": 0, "prova": prova, "nome_prova": str(m[2] or "PROVA MANUAL"),
-                "serie": serie, "raia": access_int(m[4] or 0), "nome_atleta": info["atleta"],
-                "registro": "", "pagina": 0,
-                "marcada": prova in marcadas and access_int(marcadas[prova].get("serie") or 0) == serie,
-                "marcacao": marcacao, "manual": True
+                "id": 0,
+                "prova": prova,
+                "nome_prova": str(m[2] or "PROVA MANUAL"),
+                "serie": serie,
+                "raia": access_int(m[4] or 0),
+                "nome_atleta": info["atleta"],
+                "registro": "",
+                "pagina": 0,
+                "marcada": marcada,
+                "marcacao": marcacao,
+                "manual": True
             })
 
         ocorrencias.sort(key=lambda x: (access_int(x.get("prova")), access_int(x.get("serie")), access_int(x.get("raia"))))
+
         return render_template("balizamento.html", info=info, ocorrencias=ocorrencias, marcadas=marcadas)
     finally:
         conn.close()
@@ -4380,7 +4240,6 @@ def web_vendas():
         sql = """
         SELECT
             V.IDVenda,
-            V.IDEvento AS _FiltroEvento,
             V.DataVenda,
             C.Nome AS Atleta,
             E.NomeEvento AS Evento,
@@ -4398,30 +4257,36 @@ def web_vendas():
         LEFT JOIN tblStatusVenda AS S ON CAST(V.IDStatusVenda AS TEXT)=CAST(S.IDStatusVenda AS TEXT))
         """
 
-        # IMPORTANTE: não filtramos IDEvento no SQL.
-        # O banco publicado pode ter IDEvento como texto, inteiro ou valor
-        # vindo do Access em representação binária. Nesse caso uma comparação
-        # SQL aparentemente simples pode eliminar as vendas mesmo quando elas
-        # pertencem ao evento correto. Buscamos as vendas e normalizamos o ID
-        # em Python, preservando a compatibilidade com os dados já gravados.
+        where = []
+        params = []
+
+        if evento_selecionado:
+            # IDEvento no PostgreSQL é texto.
+            # Mantemos a mesma lógica do sistema: a venda pertence ao evento
+            # gravado em tblVendaPacotes.IDEvento.
+            where.append("V.IDEvento=?")
+            params.append(str(evento_selecionado))
+
+        if search:
+            where.append("""
+                (C.Nome LIKE ?
+                 OR E.NomeEvento LIKE ?
+                 OR S.StatusVenda LIKE ?)
+            """)
+            like = "%" + search + "%"
+            params.extend([like, like, like])
+
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+
         sql += " ORDER BY V.IDVenda DESC"
 
-        cur.execute(sql)
+        cur.execute(sql, params)
         columns = [d[0] for d in cur.description]
         data = []
         for row in cur.fetchall():
             item = {}
-            evento_da_venda = 0
-            texto_busca = []
             for col, value in zip(columns, row):
-                if col == "_FiltroEvento":
-                    try:
-                        evento_da_venda = access_int(value)
-                    except Exception:
-                        evento_da_venda = 0
-                    continue
-
-                original_value = value
                 if hasattr(value, "strftime"):
                     value = value.strftime("%d/%m/%Y")
                 elif value is None:
@@ -4429,18 +4294,6 @@ def web_vendas():
                 else:
                     value = str(value)
                 item[col] = value
-                texto_busca.append(str(original_value or ""))
-
-            # Filtro por evento feito após a normalização do ID.
-            if evento_selecionado and evento_da_venda != evento_selecionado:
-                continue
-
-            # Pesquisa por atleta, evento ou status, sem alterar a listagem.
-            if search:
-                termo = search.casefold()
-                if not any(termo in t.casefold() for t in texto_busca):
-                    continue
-
             data.append(item)
 
     except Exception as e:
