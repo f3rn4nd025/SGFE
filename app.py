@@ -6256,6 +6256,7 @@ def web_entregas():
     mensagem = request.args.get("ok", "")
     erro = request.args.get("erro", "")
     conn = get_connection()
+
     try:
         cur = conn.cursor()
 
@@ -6284,55 +6285,171 @@ def web_entregas():
             })
 
         data = []
+
         if evento_id:
+            # ---------------------------------------------------------
+            # CORREÇÃO EXCLUSIVA DA TELA ENTREGAS
+            #
+            # Não faz mais JOIN entre tblVendaPacotes/tblClientes/
+            # tblEvento para montar a lista.
+            #
+            # A página primeiro lê as vendas e depois resolve cada
+            # relacionamento por ID, comparando os IDs como texto.
+            # Isso evita que uma diferença de tipo/formato no PostgreSQL
+            # derrube a página inteira ao selecionar o evento.
+            # ---------------------------------------------------------
             eid = access_int(evento_id)
+
+            # Evento selecionado.
             cur.execute("""
-                SELECT V.IDVenda, V.IDCliente, C.Nome AS Atleta,
-                       C.Telefone, C.Contato, V.IDEvento, E.NomeEvento,
-                       E.DataEvento, V.QtdProvas, V.ValorFinal,
-                       V.Finalizado, V.DataFinalizacao, V.StatusPagamento
-                FROM (((tblVendaPacotes AS V
-                LEFT JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
-                LEFT JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
-                LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda)
-                WHERE V.IDEvento=?
-                  AND (S.StatusVenda Is Null OR UCASE(S.StatusVenda) NOT LIKE '%CANCEL%')
-                ORDER BY C.Nome, V.IDVenda
+                SELECT IDEvento, NomeEvento, DataEvento
+                FROM tblEvento
+                WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)
+                LIMIT 1
+            """, [eid])
+            evento_row = cur.fetchone()
+
+            evento_nome = ""
+            evento_data = ""
+            if evento_row:
+                evento_nome = str(evento_row[1] or "")
+                evento_data = (
+                    evento_row[2].strftime("%d/%m/%Y")
+                    if hasattr(evento_row[2], "strftime")
+                    else str(evento_row[2] or "")
+                )
+
+            # Status de venda. Montamos um mapa separado para não depender
+            # de JOIN entre tipos diferentes de ID.
+            status_map = {}
+            try:
+                cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
+                for sr in cur.fetchall():
+                    status_map[str(sr[0]).strip()] = str(sr[1] or "").strip()
+            except Exception:
+                status_map = {}
+
+            # Clientes. O mapa usa o ID normalizado como texto.
+            # Assim, 123, "123" e valores equivalentes não quebram o vínculo.
+            clientes = {}
+            try:
+                cur.execute("""
+                    SELECT IDCliente, Nome, Telefone, Contato
+                    FROM tblClientes
+                """)
+                for cr in cur.fetchall():
+                    clientes[str(cr[0]).strip()] = {
+                        "nome": str(cr[1] or ""),
+                        "telefone": str(cr[2] or ""),
+                        "contato": str(cr[3] or "")
+                    }
+            except Exception:
+                clientes = {}
+
+            # Vendas: consulta somente a tabela de origem.
+            # Isso garante que uma venda existente nunca desapareça por
+            # causa de um JOIN com outra tabela.
+            cur.execute("""
+                SELECT IDVenda, IDCliente, IDEvento, IDAgendamento,
+                       QtdProvas, ValorFinal, Finalizado,
+                       DataFinalizacao, StatusPagamento, IDStatusVenda,
+                       DataVenda
+                FROM tblVendaPacotes
+                WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)
+                ORDER BY IDVenda DESC
             """, [eid])
             vendas = cur.fetchall()
 
-            # Pagamentos registrados. Uma venda pode ter mais de um pagamento.
-            cur.execute("SELECT IDVenda FROM tblPagamento")
-            pagos = set()
-            for r in cur.fetchall():
-                try:
-                    pagos.add(access_int(r[0]))
-                except Exception:
-                    pass
-
             termo = search.lower()
+
             for r in vendas:
                 id_venda = access_int(r[0])
+                id_cliente_raw = r[1]
+                id_evento_raw = r[2]
+                id_agendamento_raw = r[3]
+
+                cliente = clientes.get(str(id_cliente_raw).strip(), {})
+                atleta = str(cliente.get("nome", "") or "")
+                telefone = str(cliente.get("telefone", "") or "")
+                contato = str(cliente.get("contato", "") or "")
+
+                # Fallback somente para o vínculo do atleta:
+                # se a venda não encontrar o cliente diretamente,
+                # tenta o cliente registrado no agendamento de origem.
+                if not atleta and id_agendamento_raw not in (None, ""):
+                    try:
+                        cur.execute("""
+                            SELECT IDCliente
+                            FROM tblAgendamentos
+                            WHERE CAST(IDAgendamento AS TEXT)=CAST(? AS TEXT)
+                            LIMIT 1
+                        """, [id_agendamento_raw])
+                        ag_row = cur.fetchone()
+
+                        if ag_row:
+                            ag_cliente_raw = ag_row[0]
+                            ag_cliente = clientes.get(str(ag_cliente_raw).strip(), {})
+
+                            # Se o cliente não estiver no mapa, busca diretamente.
+                            if not ag_cliente:
+                                try:
+                                    cur.execute("""
+                                        SELECT Nome, Telefone, Contato
+                                        FROM tblClientes
+                                        WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
+                                        LIMIT 1
+                                    """, [ag_cliente_raw])
+                                    cr = cur.fetchone()
+                                    if cr:
+                                        ag_cliente = {
+                                            "nome": str(cr[0] or ""),
+                                            "telefone": str(cr[1] or ""),
+                                            "contato": str(cr[2] or "")
+                                        }
+                                except Exception:
+                                    pass
+
+                            atleta = str(ag_cliente.get("nome", "") or "")
+                            telefone = str(ag_cliente.get("telefone", "") or "")
+                            contato = str(ag_cliente.get("contato", "") or "")
+                    except Exception:
+                        pass
+
+                status_nome = status_map.get(str(r[9]).strip(), "") if r[9] is not None else ""
+                status_pagamento = str(r[8] or "aberto").strip().lower()
+
                 item = {
                     "id": id_venda,
                     "cliente_id": access_int(r[1]),
-                    "atleta": str(r[2] or ""),
-                    "telefone": str(r[3] or ""),
-                    "contato": str(r[4] or ""),
-                    "evento_id": access_int(r[5]),
-                    "evento": str(r[6] or ""),
-                    "data_evento": r[7].strftime("%d/%m/%Y") if hasattr(r[7], "strftime") else str(r[7] or ""),
-                    "provas": access_int(r[8]),
-                    "valor": money(r[9]),
-                    "entregue": bool(r[10]) if r[10] is not None else False,
-                    "data_finalizacao": r[11].strftime("%d/%m/%Y") if hasattr(r[11], "strftime") else str(r[11] or ""),
-                    "status_pagamento": str(r[12] or "aberto").strip().lower(),
-                    "pago": str(r[12] or "aberto").strip().lower() == "pago",
-                    "cortesia": str(r[12] or "aberto").strip().lower() == "cortesia"
+                    "atleta": atleta,
+                    "telefone": telefone,
+                    "contato": contato,
+                    "evento_id": access_int(id_evento_raw),
+                    "evento": evento_nome,
+                    "data_evento": evento_data,
+                    "provas": access_int(r[4]),
+                    "valor": money(r[5]),
+                    "entregue": bool(r[6]) if r[6] is not None else False,
+                    "data_finalizacao": (
+                        r[7].strftime("%d/%m/%Y")
+                        if hasattr(r[7], "strftime")
+                        else str(r[7] or "")
+                    ),
+                    "status_pagamento": status_pagamento,
+                    "pago": status_pagamento == "pago",
+                    "cortesia": status_pagamento == "cortesia"
                 }
+
                 if not termo or termo in (item["atleta"] + " " + item["evento"]).lower():
                     data.append(item)
 
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        erro = str(e)
+        data = []
     finally:
         conn.close()
 
