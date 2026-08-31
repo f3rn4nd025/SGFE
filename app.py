@@ -6251,7 +6251,7 @@ def excluir_evento(evento_id):
 
 @app.route("/entregas")
 def web_entregas():
-    evento_id = request.args.get("evento", "").strip()
+    evento_param = request.args.get("evento", "").strip()
     search = request.args.get("q", "").strip()
     mensagem = request.args.get("ok", "")
     erro = request.args.get("erro", "")
@@ -6260,171 +6260,281 @@ def web_entregas():
     try:
         cur = conn.cursor()
 
-        # Eventos para o seletor.
+        # Eventos do seletor. O ID é normalizado em Python, igual à tela Vendas.
         cur.execute("""
             SELECT IDEvento, NomeEvento, DataEvento, Cidade
             FROM tblEvento
             ORDER BY DataEvento DESC, NomeEvento
         """)
         eventos = []
+        evento_map = {}
         for r in cur.fetchall():
-            eventos.append({
-                "id": access_int(r[0]),
+            eid = access_int(r[0])
+            item = {
+                "id": eid,
                 "nome": str(r[1] or ""),
                 "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
                 "cidade": str(r[3] or "")
-            })
+            }
+            eventos.append(item)
+            evento_map[eid] = item
 
-        # Formas de pagamento para o formulário flutuante de pagamento.
-        cur.execute("SELECT IDFormaPagamento, FormaPagamento FROM tblFormaPagamento ORDER BY IDFormaPagamento")
+        # Formas de pagamento usadas pelo formulário da página.
         formas_pagamento = []
-        for r in cur.fetchall():
-            formas_pagamento.append({
-                "id": access_int(r[0]),
-                "nome": str(r[1] or "")
-            })
+        try:
+            cur.execute("SELECT IDFormaPagamento, FormaPagamento FROM tblFormaPagamento ORDER BY IDFormaPagamento")
+            for r in cur.fetchall():
+                formas_pagamento.append({
+                    "id": access_int(r[0]),
+                    "nome": str(r[1] or "")
+                })
+        except Exception:
+            formas_pagamento = []
 
         data = []
+        evento_selecionado = 0
 
-        if evento_id:
-            # ---------------------------------------------------------
-            # CORREÇÃO EXCLUSIVA DA TELA ENTREGAS
+        if evento_param:
+            evento_selecionado = access_int(evento_param)
+        elif eventos:
+            evento_selecionado = eventos[0]["id"]
+
+        if evento_selecionado:
+            evento_info = evento_map.get(evento_selecionado, {})
+            evento_nome = evento_info.get("nome", "")
+            evento_data = evento_info.get("data", "")
+
+            # =============================================================
+            # IMPORTANTE:
+            # NÃO filtrar IDEvento dentro do SQL.
             #
-            # Não faz mais JOIN entre tblVendaPacotes/tblClientes/
-            # tblEvento para montar a lista.
-            #
-            # A página primeiro lê as vendas e depois resolve cada
-            # relacionamento por ID, comparando os IDs como texto.
-            # Isso evita que uma diferença de tipo/formato no PostgreSQL
-            # derrube a página inteira ao selecionar o evento.
-            # ---------------------------------------------------------
-            eid = access_int(evento_id)
+            # Na tela Vendas a venda é lida inteira e o IDEvento é
+            # normalizado em Python. Isso é necessário porque alguns IDs
+            # antigos migrados do Access chegam ao PostgreSQL em formatos
+            # diferentes (bytes/bytea/texto). O filtro SQL por CAST(TEXT)
+            # fazia a Entregas retornar ZERO linhas mesmo existindo a venda.
+            # =============================================================
 
-            # Evento selecionado.
-            cur.execute("""
-                SELECT IDEvento, NomeEvento, DataEvento
-                FROM tblEvento
-                WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)
-                LIMIT 1
-            """, [eid])
-            evento_row = cur.fetchone()
+            # Mapa de clientes usando as mesmas regras da tela Vendas.
+            def _id_chaves_ent(v):
+                chaves = []
+                if v is None:
+                    return chaves
+                try:
+                    bruto = str(v).strip()
+                    if bruto:
+                        chaves.append(("raw", bruto))
+                except Exception:
+                    pass
+                n = access_int(v)
+                if n:
+                    chaves.append(("num", n))
+                return chaves
 
-            evento_nome = ""
-            evento_data = ""
-            if evento_row:
-                evento_nome = str(evento_row[1] or "")
-                evento_data = (
-                    evento_row[2].strftime("%d/%m/%Y")
-                    if hasattr(evento_row[2], "strftime")
-                    else str(evento_row[2] or "")
-                )
+            cliente_map = {}
+            cliente_raw_map = {}
+            cur.execute("SELECT IDCliente, Nome FROM tblClientes")
+            for r in cur.fetchall():
+                nome = str(r[1] or "").strip()
+                if not nome:
+                    continue
+                for tipo, chave in _id_chaves_ent(r[0]):
+                    if tipo == "num":
+                        cliente_map[chave] = nome
+                    else:
+                        cliente_raw_map[chave] = nome
 
-            # Status de venda. Montamos um mapa separado para não depender
-            # de JOIN entre tipos diferentes de ID.
+            def _resolver_cliente_ent(valor_id):
+                cid = access_int(valor_id)
+                if cid and cid in cliente_map:
+                    return cliente_map[cid], cid
+                try:
+                    bruto = str(valor_id).strip()
+                except Exception:
+                    bruto = ""
+                if bruto and bruto in cliente_raw_map:
+                    return cliente_raw_map[bruto], cid
+                return "", cid
+
+            # A venda nasce do agendamento. Guardamos os dois caminhos de
+            # vínculo para recuperar o cliente quando o IDCliente da venda
+            # antiga não resolver diretamente.
+            cur.execute("SELECT IDVendas, IDAgendamento, IDCliente FROM tblAgendamentos")
+            ag_venda_cliente = {}
+            ag_venda_raw = {}
+            ag_agendamento_cliente = {}
+            ag_agendamento_raw = {}
+            for r in cur.fetchall():
+                idv_raw, aid_raw, cid_raw = r[0], r[1], r[2]
+                idv = access_int(idv_raw)
+                aid = access_int(aid_raw)
+                cid = access_int(cid_raw)
+                if idv:
+                    ag_venda_cliente[idv] = cid
+                try:
+                    raw = str(idv_raw).strip() if idv_raw is not None else ""
+                except Exception:
+                    raw = ""
+                if raw:
+                    ag_venda_raw[raw] = cid_raw
+                if aid:
+                    ag_agendamento_cliente[aid] = cid
+                try:
+                    raw = str(aid_raw).strip() if aid_raw is not None else ""
+                except Exception:
+                    raw = ""
+                if raw:
+                    ag_agendamento_raw[raw] = cid_raw
+
             status_map = {}
             try:
                 cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
-                for sr in cur.fetchall():
-                    status_map[str(sr[0]).strip()] = str(sr[1] or "").strip()
+                status_map = {access_int(r[0]): str(r[1] or "").strip() for r in cur.fetchall()}
             except Exception:
                 status_map = {}
 
-            # Clientes. O mapa usa o ID normalizado como texto.
-            # Assim, 123, "123" e valores equivalentes não quebram o vínculo.
-            clientes = {}
-            try:
-                cur.execute("""
-                    SELECT IDCliente, Nome, Telefone, Contato
-                    FROM tblClientes
-                """)
-                for cr in cur.fetchall():
-                    clientes[str(cr[0]).strip()] = {
-                        "nome": str(cr[1] or ""),
-                        "telefone": str(cr[2] or ""),
-                        "contato": str(cr[3] or "")
-                    }
-            except Exception:
-                clientes = {}
-
-            # Vendas: consulta somente a tabela de origem.
-            # Isso garante que uma venda existente nunca desapareça por
-            # causa de um JOIN com outra tabela.
+            # MESMA LEITURA DA TELA VENDAS: sem JOIN e sem WHERE IDEvento.
             cur.execute("""
-                SELECT IDVenda, IDCliente, IDEvento, IDAgendamento,
+                SELECT IDVenda, DataVenda, IDCliente, IDEvento,
                        QtdProvas, ValorFinal, Finalizado,
                        DataFinalizacao, StatusPagamento, IDStatusVenda,
-                       DataVenda
+                       IDAgendamento
                 FROM tblVendaPacotes
-                WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)
                 ORDER BY IDVenda DESC
-            """, [eid])
+            """)
             vendas = cur.fetchall()
 
             termo = search.lower()
 
             for r in vendas:
                 id_venda = access_int(r[0])
-                id_cliente_raw = r[1]
-                id_evento_raw = r[2]
-                id_agendamento_raw = r[3]
+                id_cliente_raw = r[2]
+                id_evento_raw = r[3]
+                id_agendamento_raw = r[10]
+                id_evento = access_int(id_evento_raw)
 
-                cliente = clientes.get(str(id_cliente_raw).strip(), {})
-                atleta = str(cliente.get("nome", "") or "")
-                telefone = str(cliente.get("telefone", "") or "")
-                contato = str(cliente.get("contato", "") or "")
+                # O filtro acontece DEPOIS da normalização do ID, não no SQL.
+                if id_evento != evento_selecionado:
+                    continue
 
-                # Fallback somente para o vínculo do atleta:
-                # se a venda não encontrar o cliente diretamente,
-                # tenta o cliente registrado no agendamento de origem.
-                if not atleta and id_agendamento_raw not in (None, ""):
+                atleta, cliente_id = _resolver_cliente_ent(id_cliente_raw)
+                telefone = ""
+                contato = ""
+
+                # Caminho principal: VENDA -> AGENDAMENTO -> CLIENTE.
+                if not atleta and id_venda:
+                    cid_ag = ag_venda_cliente.get(id_venda, 0)
+                    if cid_ag:
+                        atleta = cliente_map.get(cid_ag, "")
+                        if atleta:
+                            cliente_id = cid_ag
+
+                if not atleta and id_venda:
+                    try:
+                        venda_txt = str(r[0]).strip() if r[0] is not None else ""
+                    except Exception:
+                        venda_txt = ""
+                    if venda_txt:
+                        cid_raw = ag_venda_raw.get(venda_txt)
+                        if cid_raw is not None:
+                            atleta, cliente_id = _resolver_cliente_ent(cid_raw)
+
+                # Fallback: VENDA -> IDAgendamento -> CLIENTE.
+                id_agendamento = access_int(id_agendamento_raw)
+                if not atleta and id_agendamento:
+                    cid_ag = ag_agendamento_cliente.get(id_agendamento, 0)
+                    if cid_ag:
+                        atleta = cliente_map.get(cid_ag, "")
+                        if atleta:
+                            cliente_id = cid_ag
+
+                if not atleta:
+                    try:
+                        aid_txt = str(id_agendamento_raw).strip() if id_agendamento_raw is not None else ""
+                    except Exception:
+                        aid_txt = ""
+                    if aid_txt:
+                        cid_raw = ag_agendamento_raw.get(aid_txt)
+                        if cid_raw is not None:
+                            atleta, cliente_id = _resolver_cliente_ent(cid_raw)
+
+                # Último recurso no PostgreSQL, mantendo a mesma estratégia da
+                # tela Vendas para IDs antigos que não sejam reproduzidos pelo
+                # valor normalizado em Python.
+                if not atleta and id_venda and _is_postgres():
                     try:
                         cur.execute("""
-                            SELECT IDCliente
-                            FROM tblAgendamentos
-                            WHERE CAST(IDAgendamento AS TEXT)=CAST(? AS TEXT)
+                            SELECT A.IDCliente
+                            FROM tblAgendamentos AS A
+                            WHERE CAST(A.IDVendas AS TEXT)=CAST(? AS TEXT)
+                            ORDER BY A.IDAgendamento DESC
                             LIMIT 1
-                        """, [id_agendamento_raw])
+                        """, [id_venda])
                         ag_row = cur.fetchone()
-
                         if ag_row:
-                            ag_cliente_raw = ag_row[0]
-                            ag_cliente = clientes.get(str(ag_cliente_raw).strip(), {})
-
-                            # Se o cliente não estiver no mapa, busca diretamente.
-                            if not ag_cliente:
-                                try:
-                                    cur.execute("""
-                                        SELECT Nome, Telefone, Contato
-                                        FROM tblClientes
-                                        WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
-                                        LIMIT 1
-                                    """, [ag_cliente_raw])
-                                    cr = cur.fetchone()
-                                    if cr:
-                                        ag_cliente = {
-                                            "nome": str(cr[0] or ""),
-                                            "telefone": str(cr[1] or ""),
-                                            "contato": str(cr[2] or "")
-                                        }
-                                except Exception:
-                                    pass
-
-                            atleta = str(ag_cliente.get("nome", "") or "")
-                            telefone = str(ag_cliente.get("telefone", "") or "")
-                            contato = str(ag_cliente.get("contato", "") or "")
+                            atleta, cliente_id = _resolver_cliente_ent(ag_row[0])
+                            if not atleta:
+                                cur.execute("""
+                                    SELECT Nome FROM tblClientes
+                                    WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
+                                    LIMIT 1
+                                """, [ag_row[0]])
+                                cr = cur.fetchone()
+                                if cr and cr[0]:
+                                    atleta = str(cr[0]).strip()
                     except Exception:
                         pass
 
-                status_nome = status_map.get(str(r[9]).strip(), "") if r[9] is not None else ""
+                if not atleta and id_agendamento_raw is not None and _is_postgres():
+                    try:
+                        cur.execute("""
+                            SELECT A.IDCliente
+                            FROM tblAgendamentos AS A
+                            WHERE CAST(A.IDAgendamento AS TEXT)=CAST(? AS TEXT)
+                            ORDER BY A.IDAgendamento DESC
+                            LIMIT 1
+                        """, [id_agendamento_raw])
+                        ag_row = cur.fetchone()
+                        if ag_row:
+                            atleta, cliente_id = _resolver_cliente_ent(ag_row[0])
+                            if not atleta:
+                                cur.execute("""
+                                    SELECT Nome FROM tblClientes
+                                    WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
+                                    LIMIT 1
+                                """, [ag_row[0]])
+                                cr = cur.fetchone()
+                                if cr and cr[0]:
+                                    atleta = str(cr[0]).strip()
+                    except Exception:
+                        pass
+
+                # Recupera telefone/contato somente depois de descobrir o
+                # cliente. Esses campos são apenas auxiliares da tela.
+                if cliente_id:
+                    try:
+                        cur.execute("""
+                            SELECT Telefone, Contato
+                            FROM tblClientes
+                            WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
+                            LIMIT 1
+                        """, [cliente_id])
+                        cr = cur.fetchone()
+                        if cr:
+                            telefone = str(cr[0] or "")
+                            contato = str(cr[1] or "")
+                    except Exception:
+                        pass
+
                 status_pagamento = str(r[8] or "aberto").strip().lower()
 
                 item = {
                     "id": id_venda,
-                    "cliente_id": access_int(r[1]),
+                    "cliente_id": cliente_id,
                     "atleta": atleta,
                     "telefone": telefone,
                     "contato": contato,
-                    "evento_id": access_int(id_evento_raw),
+                    "evento_id": id_evento,
                     "evento": evento_nome,
                     "data_evento": evento_data,
                     "provas": access_int(r[4]),
@@ -6443,6 +6553,11 @@ def web_entregas():
                 if not termo or termo in (item["atleta"] + " " + item["evento"]).lower():
                     data.append(item)
 
+            print(f"[SGFE-ENTREGAS] evento_selecionado={evento_selecionado} vendas_exibidas={len(data)}")
+            for item in data:
+                if not item["atleta"]:
+                    print(f"[SGFE-ENTREGAS] atleta_nao_localizado venda={item['id']} cliente={item['cliente_id']}")
+
     except Exception as e:
         try:
             conn.rollback()
@@ -6450,13 +6565,14 @@ def web_entregas():
             pass
         erro = str(e)
         data = []
+        print(f"[SGFE-ENTREGAS] ERRO_LISTAGEM={e}")
     finally:
         conn.close()
 
     return render_template(
         "entregas.html", page="entregas", title="Entregas",
         subtitle="Controle de entrega das fotos e situação do pagamento",
-        eventos=eventos, evento_selecionado=access_int(evento_id) if evento_id else 0,
+        eventos=eventos, evento_selecionado=evento_selecionado,
         data=data, search=search, mensagem=mensagem, erro=erro,
         formas_pagamento=formas_pagamento
     )
