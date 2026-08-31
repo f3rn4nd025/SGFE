@@ -4487,6 +4487,73 @@ def web_vendas():
                     if cid_raw_ag is not None:
                         atleta, cliente_id = _resolver_cliente(cid_raw_ag)
 
+            # ÚLTIMA RECUPERAÇÃO PARA OS REGISTROS MIGRADOS:
+            # quando o PostgreSQL recebeu os IDs antigos do Access em formatos
+            # diferentes, a conversão em Python pode não reproduzir exatamente
+            # o valor textual armazenado. Nesse caso cruzamos diretamente no
+            # PostgreSQL o ID da venda com tblAgendamentos.IDVendas e, depois,
+            # o ID do cliente com tblClientes.IDCliente.
+            #
+            # Esta etapa é SOMENTE leitura para montar a coluna ATLETA.
+            if not atleta and venda_id and _is_postgres():
+                try:
+                    cur.execute("""
+                        SELECT A.IDCliente
+                        FROM tblAgendamentos AS A
+                        WHERE CAST(A.IDVendas AS TEXT)=CAST(? AS TEXT)
+                        ORDER BY A.IDAgendamento DESC
+                        LIMIT 1
+                    """, [venda_id])
+                    ag_row = cur.fetchone()
+
+                    if ag_row:
+                        cid_raw = ag_row[0]
+                        atleta, cliente_id = _resolver_cliente(cid_raw)
+
+                        if not atleta:
+                            cur.execute("""
+                                SELECT Nome
+                                FROM tblClientes
+                                WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
+                                LIMIT 1
+                            """, [cid_raw])
+                            cliente_row = cur.fetchone()
+                            if cliente_row and cliente_row[0]:
+                                atleta = str(cliente_row[0]).strip()
+                except Exception:
+                    pass
+
+            # Se o vínculo IDVendas não existir em registros antigos, tenta
+            # diretamente o IDAgendamento gravado na venda, também sem depender
+            # da conversão Python do ID.
+            if not atleta and id_agendamento_raw is not None and _is_postgres():
+                try:
+                    cur.execute("""
+                        SELECT A.IDCliente
+                        FROM tblAgendamentos AS A
+                        WHERE CAST(A.IDAgendamento AS TEXT)=CAST(? AS TEXT)
+                        ORDER BY A.IDAgendamento DESC
+                        LIMIT 1
+                    """, [id_agendamento_raw])
+                    ag_row = cur.fetchone()
+
+                    if ag_row:
+                        cid_raw = ag_row[0]
+                        atleta, cliente_id = _resolver_cliente(cid_raw)
+
+                        if not atleta:
+                            cur.execute("""
+                                SELECT Nome
+                                FROM tblClientes
+                                WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
+                                LIMIT 1
+                            """, [cid_raw])
+                            cliente_row = cur.fetchone()
+                            if cliente_row and cliente_row[0]:
+                                atleta = str(cliente_row[0]).strip()
+                except Exception:
+                    pass
+
             if not atleta:
                 print(f"[SGFE-VENDAS] atleta_nao_localizado venda={venda_id} IDCliente={r[2]!r} IDAgendamento={r[9]!r}")
 
