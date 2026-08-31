@@ -4355,52 +4355,32 @@ def web_vendas():
                 else:
                     cliente_raw_map[chave] = nome
 
-        # Algumas vendas antigas podem ter o IDCliente inconsistente após a
-        # migração, mas ainda possuem o IDAgendamento correto. Como a venda
-        # nasce do agendamento, usamos esse vínculo como segunda fonte para
-        # localizar o atleta. Também preservamos o IDCliente bruto.
-        cur.execute("SELECT IDAgendamento, IDCliente FROM tblAgendamentos")
+        # A venda nasce de um agendamento. O vínculo mais direto e seguro para
+        # recuperar o atleta de uma venda antiga é tblAgendamentos.IDVendas ->
+        # tblVendaPacotes.IDVenda. Só depois usamos IDAgendamento e IDCliente
+        # como compatibilidade para registros antigos. Nada é gravado/alterado.
+        cur.execute("SELECT IDVendas, IDAgendamento, IDCliente FROM tblAgendamentos")
+        agendamento_venda_cliente_map = {}
+        agendamento_venda_raw_map = {}
         agendamento_cliente_map = {}
         agendamento_cliente_raw_map = {}
         for r in cur.fetchall():
-            aid_raw, cid_raw = r[0], r[1]
+            idv_raw, aid_raw, cid_raw = r[0], r[1], r[2]
+            idv = _num(idv_raw)
             aid = _num(aid_raw)
             cid = _num(cid_raw)
+
+            if idv:
+                agendamento_venda_cliente_map[idv] = cid
+            for tipo, chave in _id_chaves(idv_raw):
+                if tipo == "raw":
+                    agendamento_venda_raw_map[chave] = cid_raw
+
             if aid:
                 agendamento_cliente_map[aid] = cid
             for tipo, chave in _id_chaves(aid_raw):
                 if tipo == "raw":
                     agendamento_cliente_raw_map[chave] = cid_raw
-
-        # CORREÇÃO ESPECÍFICA DA LISTAGEM DE VENDAS:
-        # algumas vendas antigas não conseguem chegar ao nome pelo IDCliente
-        # da própria venda. Nesses casos, o vínculo confiável é:
-        # VENDA.IDAgendamento -> AGENDAMENTO.IDAgendamento -> CLIENTE.Nome.
-        # Na tela de Agendamentos o PostgreSQL já usa comparação textual dos
-        # IDs, portanto reproduzimos exatamente essa estratégia aqui.
-        agendamento_nome_map = {}
-        if _is_postgres():
-            cur.execute("""
-                SELECT A.IDAgendamento, C.Nome
-                FROM tblAgendamentos A
-                LEFT JOIN tblClientes C
-                  ON A.IDCliente::text=C.IDCliente::text
-            """)
-        else:
-            cur.execute("""
-                SELECT A.IDAgendamento, C.Nome
-                FROM tblAgendamentos AS A
-                LEFT JOIN tblClientes AS C ON A.IDCliente=C.IDCliente
-            """)
-        for r in cur.fetchall():
-            nome_ag = _txt(r[1]).strip()
-            if not nome_ag:
-                continue
-            for tipo, chave in _id_chaves(r[0]):
-                if tipo == "num":
-                    agendamento_nome_map[chave] = nome_ag
-                else:
-                    agendamento_nome_map[chave] = nome_ag
 
         def _resolver_cliente(valor_id):
             # 1) representação numérica normalizada
@@ -4455,36 +4435,38 @@ def web_vendas():
 
             atleta, cliente_id = _resolver_cliente(r[2])
 
-            # Fallback seguro: se o IDCliente da venda não localizar o nome,
-            # tenta o IDAgendamento da própria venda. Não altera banco nem
-            # outras telas, apenas recupera o nome correto para a listagem.
+            # FONTE PRINCIPAL PARA A LISTAGEM DE VENDAS:
+            # a venda foi criada a partir de um agendamento e o agendamento
+            # guarda o ID da venda em IDVendas. Portanto, quando o IDCliente
+            # gravado na venda antiga não consegue localizar o nome, cruzamos
+            # primeiro VENDA -> AGENDAMENTO -> CLIENTE. Isso resolve somente a
+            # exibição do nome e não altera nenhuma regra nem nenhum registro.
+            if not atleta and venda_id:
+                cliente_id_ag_venda = agendamento_venda_cliente_map.get(venda_id, 0)
+                if cliente_id_ag_venda:
+                    atleta = cliente_map.get(cliente_id_ag_venda, "")
+                    if atleta:
+                        cliente_id = cliente_id_ag_venda
+
+            # Mesmo vínculo acima, preservando a representação textual original
+            # caso IDVendas tenha sido migrado como texto/bytea.
+            if not atleta and venda_id:
+                venda_id_txt = str(r[0]).strip() if r[0] is not None else ""
+                if venda_id_txt:
+                    cid_raw_venda = agendamento_venda_raw_map.get(venda_id_txt)
+                    if cid_raw_venda is not None:
+                        atleta, cliente_id = _resolver_cliente(cid_raw_venda)
+
+            # Fallback de compatibilidade: se ainda não encontrou pelo vínculo
+            # da própria venda, tenta o IDAgendamento registrado na venda.
             id_agendamento_raw = r[9]
             id_agendamento = _num(id_agendamento_raw)
             if not atleta and id_agendamento:
-                # Primeiro tenta o vínculo direto do agendamento com o nome.
-                # Isso resolve vendas antigas cujo IDCliente da venda não bate
-                # com a representação migrada em tblClientes.
-                atleta = agendamento_nome_map.get(id_agendamento, "")
-
-                if atleta:
-                    cliente_id_ag = agendamento_cliente_map.get(id_agendamento, 0)
-                    if cliente_id_ag:
+                cliente_id_ag = agendamento_cliente_map.get(id_agendamento, 0)
+                if cliente_id_ag:
+                    atleta = cliente_map.get(cliente_id_ag, "")
+                    if atleta:
                         cliente_id = cliente_id_ag
-                else:
-                    cliente_id_ag = agendamento_cliente_map.get(id_agendamento, 0)
-                    if cliente_id_ag:
-                        atleta = cliente_map.get(cliente_id_ag, "")
-                        if atleta:
-                            cliente_id = cliente_id_ag
-
-                # Também tenta a chave textual original do IDAgendamento.
-                if not atleta:
-                    try:
-                        aid_raw_txt2 = str(id_agendamento_raw).strip()
-                    except Exception:
-                        aid_raw_txt2 = ""
-                    if aid_raw_txt2:
-                        atleta = agendamento_nome_map.get(aid_raw_txt2, "")
 
             # Último fallback para agendamentos cujo ID também foi migrado como
             # texto: usa a representação original do IDAgendamento.
