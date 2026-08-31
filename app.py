@@ -4241,7 +4241,7 @@ def web_vendas():
         SELECT
             V.IDVenda,
             V.DataVenda,
-            COALESCE(CA.Nome, C.Nome) AS Atleta,
+            C.Nome AS Atleta,
             E.NomeEvento AS Evento,
             V.QtdProvas,
             V.ValorPacote,
@@ -4255,7 +4255,6 @@ def web_vendas():
         LEFT JOIN tblClientes AS C ON CAST(V.IDCliente AS TEXT)=CAST(C.IDCliente AS TEXT))
         LEFT JOIN tblEvento AS E ON CAST(V.IDEvento AS TEXT)=CAST(E.IDEvento AS TEXT))
         LEFT JOIN tblAgendamentos AS A ON CAST(V.IDAgendamento AS TEXT)=CAST(A.IDAgendamento AS TEXT))
-        LEFT JOIN tblClientes AS CA ON CAST(A.IDCliente AS TEXT)=CAST(CA.IDCliente AS TEXT))
         LEFT JOIN tblStatusVenda AS S ON CAST(V.IDStatusVenda AS TEXT)=CAST(S.IDStatusVenda AS TEXT))
         """
 
@@ -4271,7 +4270,7 @@ def web_vendas():
 
         if search:
             where.append("""
-                (COALESCE(CA.Nome, C.Nome) LIKE ?
+                (C.Nome LIKE ?
                  OR E.NomeEvento LIKE ?
                  OR S.StatusVenda LIKE ?)
             """)
@@ -5971,12 +5970,15 @@ def web_entregas():
                        C.Telefone, C.Contato, V.IDEvento, E.NomeEvento,
                        E.DataEvento, V.QtdProvas, V.ValorFinal,
                        V.Finalizado, V.DataFinalizacao, V.StatusPagamento
-                FROM (((tblVendaPacotes AS V
-                INNER JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
-                INNER JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
-                LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda)
-                WHERE V.IDEvento=?
-                  AND (S.StatusVenda Is Null OR UCASE(S.StatusVenda) NOT LIKE '%CANCEL%')
+                FROM tblVendaPacotes AS V
+                LEFT JOIN tblClientes AS C
+                  ON CAST(V.IDCliente AS TEXT)=CAST(C.IDCliente AS TEXT)
+                LEFT JOIN tblEvento AS E
+                  ON CAST(V.IDEvento AS TEXT)=CAST(E.IDEvento AS TEXT)
+                LEFT JOIN tblStatusVenda AS S
+                  ON CAST(V.IDStatusVenda AS TEXT)=CAST(S.IDStatusVenda AS TEXT)
+                WHERE CAST(V.IDEvento AS TEXT)=CAST(? AS TEXT)
+                  AND (S.StatusVenda IS NULL OR UPPER(S.StatusVenda) NOT LIKE '%CANCEL%')
                 ORDER BY C.Nome, V.IDVenda
             """, [eid])
             vendas = cur.fetchall()
