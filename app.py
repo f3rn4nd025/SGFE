@@ -6292,8 +6292,8 @@ def web_entregas():
                        E.DataEvento, V.QtdProvas, V.ValorFinal,
                        V.Finalizado, V.DataFinalizacao, V.StatusPagamento
                 FROM (((tblVendaPacotes AS V
-                INNER JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
-                INNER JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
+                LEFT JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
+                LEFT JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
                 LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda)
                 WHERE V.IDEvento=?
                   AND (S.StatusVenda Is Null OR UCASE(S.StatusVenda) NOT LIKE '%CANCEL%')
