@@ -4390,19 +4390,35 @@ def web_vendas():
                     agendamento_cliente_raw_map[chave] = cid_raw
 
         def _resolver_cliente(valor_id):
-            # 1) representação numérica normalizada
+            # Resolve o cliente pelo ID real da venda/agendamento.
+            # A consulta direta é a fonte de verdade para a exibição do nome,
+            # evitando depender de mapas que podem conter representações
+            # diferentes dos IDs antigos migrados.
             cid = _num(valor_id)
+            if cid:
+                try:
+                    cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=? LIMIT 1", [cid])
+                    row_cliente = cur.fetchone()
+                    if row_cliente and row_cliente[0]:
+                        nome = str(row_cliente[0]).strip()
+                        if nome:
+                            return nome, cid
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+
+            # Compatibilidade com representações antigas/textuais.
             if cid and cid in cliente_map:
                 return cliente_map[cid], cid
 
-            # 2) representação textual original
             try:
                 bruto = str(valor_id).strip()
             except Exception:
                 bruto = ""
             if bruto and bruto in cliente_raw_map:
-                nome = cliente_raw_map[bruto]
-                return nome, cid
+                return cliente_raw_map[bruto], cid
 
             return "", cid
 
@@ -6345,7 +6361,23 @@ def web_entregas():
                         cliente_raw_map[chave] = nome
 
             def _resolver_cliente_ent(valor_id):
+                # Resolve diretamente em tblClientes. A Entregas usa a mesma
+                # origem da Venda e não cria/edita nenhum vínculo.
                 cid = access_int(valor_id)
+                if cid:
+                    try:
+                        cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=? LIMIT 1", [cid])
+                        row_cliente = cur.fetchone()
+                        if row_cliente and row_cliente[0]:
+                            nome = str(row_cliente[0]).strip()
+                            if nome:
+                                return nome, cid
+                    except Exception:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+
                 if cid and cid in cliente_map:
                     return cliente_map[cid], cid
                 try:
