@@ -489,6 +489,13 @@ def aplicar_modal_sgfe(response):
 
         pos = html.lower().rfind('</body>')
         html = html[:pos] + modal_script + html[pos:]
+
+        # ENTREGAS: apenas normaliza a fonte dos dados das linhas da tabela.
+        # Não altera filtro, consultas, rotas, banco ou qualquer ação da tela.
+        if request.path == '/entregas':
+            css_entregas_fonte = "<style id='sgfe-entregas-fonte-normal'>table tbody td, table tbody td * { font-weight: 400 !important; }</style>"
+            html = html[:pos] + css_entregas_fonte + html[pos:]
+
         response.set_data(html)
         return response
     except Exception:
