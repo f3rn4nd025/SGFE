@@ -4925,9 +4925,39 @@ html, body{
     text-overflow:ellipsis !important;
 }
 
+/* Distribuição real das colunas, evitando grandes espaços vazios e
+   preservando o nome completo do evento sempre que houver espaço. */
+.sgfe-vendas-tabela-expandida table th:nth-child(1),
+.sgfe-vendas-tabela-expandida table td:nth-child(1){ width:70px !important; }
+.sgfe-vendas-tabela-expandida table th:nth-child(2),
+.sgfe-vendas-tabela-expandida table td:nth-child(2){ width:105px !important; }
+.sgfe-vendas-tabela-expandida table th:nth-child(3),
+.sgfe-vendas-tabela-expandida table td:nth-child(3){ width:225px !important; }
+.sgfe-vendas-tabela-expandida table th:nth-child(4),
+.sgfe-vendas-tabela-expandida table td:nth-child(4){ width:250px !important; }
+.sgfe-vendas-tabela-expandida table th:nth-child(5),
+.sgfe-vendas-tabela-expandida table td:nth-child(5){ width:70px !important; }
+.sgfe-vendas-tabela-expandida table th:nth-child(6),
+.sgfe-vendas-tabela-expandida table td:nth-child(6){ width:110px !important; }
+.sgfe-vendas-tabela-expandida table th:nth-child(7),
+.sgfe-vendas-tabela-expandida table td:nth-child(7){ width:110px !important; }
+.sgfe-vendas-tabela-expandida table th:nth-child(8),
+.sgfe-vendas-tabela-expandida table td:nth-child(8){ width:125px !important; }
+.sgfe-vendas-tabela-expandida table th:nth-child(9),
+.sgfe-vendas-tabela-expandida table td:nth-child(9){ width:120px !important; }
+.sgfe-vendas-tabela-expandida table th:nth-child(10),
+.sgfe-vendas-tabela-expandida table td:nth-child(10){ width:120px !important; }
+
+.sgfe-vendas-tabela-expandida table th:nth-child(4),
+.sgfe-vendas-tabela-expandida table td:nth-child(4){
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:clip !important;
+}
+
 .sgfe-vendas-tabela-expandida table th:last-child,
 .sgfe-vendas-tabela-expandida table td:last-child{
-    width:110px !important;
+    width:130px !important;
 }
 
 .sgfe-vendas-tabela-expandida table td:last-child .action-btn{
