@@ -4224,8 +4224,7 @@ def web_vendas():
     data = []
     columns = [
         "IDVenda", "DataVenda", "Atleta", "Evento", "QtdProvas",
-        "ValorPacote", "ValorDesconto", "ValorFinal", "Status",
-        "Finalizado", "DataFinalizacao"
+        "ValorPacote", "ValorDesconto", "ValorFinal", "Status"
     ]
 
     def _txt(v):
