@@ -4433,23 +4433,46 @@ def web_vendas():
         # A venda é lida diretamente, sem JOIN por IDs. A mesma estratégia
         # usada na tela de ATLETAS é aplicada aqui: ler por posição e depois
         # montar aliases para o template.
-        cur.execute("""
-            SELECT
-                IDVenda,
-                DataVenda,
-                IDCliente,
-                IDEvento,
-                QtdProvas,
-                ValorPacote,
-                ValorDesconto,
-                ValorFinal,
-                IDStatusVenda,
-                IDAgendamento,
-                Finalizado,
-                DataFinalizacao
-            FROM tblVendaPacotes
-            ORDER BY IDVenda DESC
-        """)
+        # FILTRO DE EVENTO NO BANCO.
+        # O filtro Python continua existindo como segunda proteção, mas a
+        # consulta já traz somente as vendas do evento selecionado.
+        if evento_selecionado:
+            cur.execute("""
+                SELECT
+                    IDVenda,
+                    DataVenda,
+                    IDCliente,
+                    IDEvento,
+                    QtdProvas,
+                    ValorPacote,
+                    ValorDesconto,
+                    ValorFinal,
+                    IDStatusVenda,
+                    IDAgendamento,
+                    Finalizado,
+                    DataFinalizacao
+                FROM tblVendaPacotes
+                WHERE IDEvento = ?
+                ORDER BY IDVenda DESC
+            """, [evento_selecionado])
+        else:
+            cur.execute("""
+                SELECT
+                    IDVenda,
+                    DataVenda,
+                    IDCliente,
+                    IDEvento,
+                    QtdProvas,
+                    ValorPacote,
+                    ValorDesconto,
+                    ValorFinal,
+                    IDStatusVenda,
+                    IDAgendamento,
+                    Finalizado,
+                    DataFinalizacao
+                FROM tblVendaPacotes
+                ORDER BY IDVenda DESC
+            """)
 
         for r in cur.fetchall():
             venda_id = _num(r[0])
