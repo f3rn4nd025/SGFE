@@ -4970,14 +4970,24 @@ html, body{
         if(headRow && !table.dataset.sgfeEdicaoAcoes){
             const headers=Array.from(headRow.cells);
             let indiceData=-1;
+            let indiceAcaoAntiga=-1;
             headers.forEach(function(cell, i){
                 const t=texto(cell).toUpperCase();
                 if(t==='DATA FINALIZAÇÃO' || t==='DATA FINALIZACAO') indiceData=i;
+                if(t==='AÇÃO' || t==='ACAO') indiceAcaoAntiga=i;
             });
 
             if(indiceData>=0){
                 Array.from(table.rows).forEach(function(row){
                     if(row.cells[indiceData]) row.cells[indiceData].style.display='none';
+                });
+            }
+
+            /* Remove somente a coluna AÇÃO antiga, deixando apenas o novo EDITAR
+               na coluna AÇÕES. */
+            if(indiceAcaoAntiga>=0){
+                Array.from(table.rows).forEach(function(row){
+                    if(row.cells[indiceAcaoAntiga]) row.cells[indiceAcaoAntiga].style.display='none';
                 });
             }
 
