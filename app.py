@@ -789,6 +789,27 @@ def _postgres_sql(sql):
     s = re.sub(r"\bTEXT\s*\(\s*(\d+)\s*\)", r"VARCHAR(\1)", s, flags=re.I)
     s = re.sub(r"\bAUTOINCREMENT\s+PRIMARY\s+KEY", "BIGSERIAL PRIMARY KEY", s, flags=re.I)
 
+    # IDEvento foi migrado para PostgreSQL como character varying em partes
+    # do banco. O código legado trabalha com IDs numéricos. Comparar
+    # diretamente varchar = integer derruba a consulta (ex.: IDEvento = 9).
+    # Normalizamos a comparação pelo texto, funcionando tanto se a coluna
+    # estiver varchar quanto integer, sem alterar nenhum dado.
+    s = re.sub(
+        r"(\b(?:[A-Za-z_][A-Za-z0-9_]*\.)?IDEvento)\s*=\s*\?",
+        r"CAST(\1 AS TEXT)=CAST(? AS TEXT)",
+        s,
+        flags=re.I,
+    )
+
+    # Também protege consultas antigas que tenham o número do evento
+    # diretamente no SQL, em vez de usar placeholder.
+    s = re.sub(
+        r"(\b(?:[A-Za-z_][A-Za-z0-9_]*\.)?IDEvento)\s*=\s*(\d+)\b",
+        r"CAST(\1 AS TEXT)=CAST(\2 AS TEXT)",
+        s,
+        flags=re.I,
+    )
+
     # As consultas atuais usam ? como placeholder. psycopg2 usa %s.
     s = s.replace("?", "%s")
     return s
@@ -4259,11 +4280,6 @@ def web_vendas():
             return int.from_bytes(raw, byteorder="little", signed=False)
 
         if isinstance(v, str):
-            # IDs migrados como um único caractere: o code point é o ID.
-            # Ex.: '4'=52, '5'=53, '\\t'=9, '\\x1f'=31, 'ć'=263.
-            if len(v) == 1:
-                return ord(v)
-
             s = v.strip()
             if not s:
                 return 0
@@ -4395,35 +4411,19 @@ def web_vendas():
                     agendamento_cliente_raw_map[chave] = cid_raw
 
         def _resolver_cliente(valor_id):
-            # Resolve o cliente pelo ID real da venda/agendamento.
-            # A consulta direta é a fonte de verdade para a exibição do nome,
-            # evitando depender de mapas que podem conter representações
-            # diferentes dos IDs antigos migrados.
+            # 1) representação numérica normalizada
             cid = _num(valor_id)
-            if cid:
-                try:
-                    cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=? LIMIT 1", [cid])
-                    row_cliente = cur.fetchone()
-                    if row_cliente and row_cliente[0]:
-                        nome = str(row_cliente[0]).strip()
-                        if nome:
-                            return nome, cid
-                except Exception:
-                    try:
-                        conn.rollback()
-                    except Exception:
-                        pass
-
-            # Compatibilidade com representações antigas/textuais.
             if cid and cid in cliente_map:
                 return cliente_map[cid], cid
 
+            # 2) representação textual original
             try:
                 bruto = str(valor_id).strip()
             except Exception:
                 bruto = ""
             if bruto and bruto in cliente_raw_map:
-                return cliente_raw_map[bruto], cid
+                nome = cliente_raw_map[bruto]
+                return nome, cid
 
             return "", cid
 
@@ -4433,46 +4433,23 @@ def web_vendas():
         # A venda é lida diretamente, sem JOIN por IDs. A mesma estratégia
         # usada na tela de ATLETAS é aplicada aqui: ler por posição e depois
         # montar aliases para o template.
-        # FILTRO DE EVENTO NO BANCO.
-        # O filtro Python continua existindo como segunda proteção, mas a
-        # consulta já traz somente as vendas do evento selecionado.
-        if evento_selecionado:
-            cur.execute("""
-                SELECT
-                    IDVenda,
-                    DataVenda,
-                    IDCliente,
-                    IDEvento,
-                    QtdProvas,
-                    ValorPacote,
-                    ValorDesconto,
-                    ValorFinal,
-                    IDStatusVenda,
-                    IDAgendamento,
-                    Finalizado,
-                    DataFinalizacao
-                FROM tblVendaPacotes
-                WHERE IDEvento = CAST(? AS INTEGER)
-                ORDER BY IDVenda DESC
-            """, [evento_selecionado])
-        else:
-            cur.execute("""
-                SELECT
-                    IDVenda,
-                    DataVenda,
-                    IDCliente,
-                    IDEvento,
-                    QtdProvas,
-                    ValorPacote,
-                    ValorDesconto,
-                    ValorFinal,
-                    IDStatusVenda,
-                    IDAgendamento,
-                    Finalizado,
-                    DataFinalizacao
-                FROM tblVendaPacotes
-                ORDER BY IDVenda DESC
-            """)
+        cur.execute("""
+            SELECT
+                IDVenda,
+                DataVenda,
+                IDCliente,
+                IDEvento,
+                QtdProvas,
+                ValorPacote,
+                ValorDesconto,
+                ValorFinal,
+                IDStatusVenda,
+                IDAgendamento,
+                Finalizado,
+                DataFinalizacao
+            FROM tblVendaPacotes
+            ORDER BY IDVenda DESC
+        """)
 
         for r in cur.fetchall():
             venda_id = _num(r[0])
@@ -4647,16 +4624,6 @@ def web_vendas():
                 "DataFinalizacao": _txt(r[11]),
                 "data_finalizacao": _txt(r[11]),
             }
-
-            # TRAVA FINAL DO FILTRO DE EVENTO
-            # A seleção da tela é obrigatória para a lista: se há um evento
-            # selecionado, somente vendas daquele evento entram em `data`.
-            if evento_selecionado:
-                evento_nome_selecionado = evento_map.get(
-                    evento_selecionado, {}
-                ).get("nome", "").strip()
-                if evento_nome_selecionado and evento_nome.strip() != evento_nome_selecionado:
-                    continue
 
             if search:
                 alvo = " ".join([
@@ -6305,375 +6272,95 @@ def excluir_evento(evento_id):
 
 @app.route("/entregas")
 def web_entregas():
-    evento_param = request.args.get("evento", "").strip()
+    evento_id = request.args.get("evento", "").strip()
     search = request.args.get("q", "").strip()
     mensagem = request.args.get("ok", "")
     erro = request.args.get("erro", "")
     conn = get_connection()
-
     try:
         cur = conn.cursor()
 
-        # Eventos do seletor. O ID é normalizado em Python, igual à tela Vendas.
+        # Eventos para o seletor.
         cur.execute("""
             SELECT IDEvento, NomeEvento, DataEvento, Cidade
             FROM tblEvento
             ORDER BY DataEvento DESC, NomeEvento
         """)
         eventos = []
-        evento_map = {}
         for r in cur.fetchall():
-            eid = access_int(r[0])
-            item = {
-                "id": eid,
+            eventos.append({
+                "id": access_int(r[0]),
                 "nome": str(r[1] or ""),
                 "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
                 "cidade": str(r[3] or "")
-            }
-            eventos.append(item)
-            evento_map[eid] = item
+            })
 
-        # Formas de pagamento usadas pelo formulário da página.
+        # Formas de pagamento para o formulário flutuante de pagamento.
+        cur.execute("SELECT IDFormaPagamento, FormaPagamento FROM tblFormaPagamento ORDER BY IDFormaPagamento")
         formas_pagamento = []
-        try:
-            cur.execute("SELECT IDFormaPagamento, FormaPagamento FROM tblFormaPagamento ORDER BY IDFormaPagamento")
-            for r in cur.fetchall():
-                formas_pagamento.append({
-                    "id": access_int(r[0]),
-                    "nome": str(r[1] or "")
-                })
-        except Exception:
-            formas_pagamento = []
+        for r in cur.fetchall():
+            formas_pagamento.append({
+                "id": access_int(r[0]),
+                "nome": str(r[1] or "")
+            })
 
         data = []
-        evento_selecionado = 0
-
-        if evento_param:
-            evento_selecionado = access_int(evento_param)
-        elif eventos:
-            evento_selecionado = eventos[0]["id"]
-
-        if evento_selecionado:
-            evento_info = evento_map.get(evento_selecionado, {})
-            evento_nome = evento_info.get("nome", "")
-            evento_data = evento_info.get("data", "")
-
-            # =============================================================
-            # IMPORTANTE:
-            # NÃO filtrar IDEvento dentro do SQL.
-            #
-            # Na tela Vendas a venda é lida inteira e o IDEvento é
-            # normalizado em Python. Isso é necessário porque alguns IDs
-            # antigos migrados do Access chegam ao PostgreSQL em formatos
-            # diferentes (bytes/bytea/texto). O filtro SQL por CAST(TEXT)
-            # fazia a Entregas retornar ZERO linhas mesmo existindo a venda.
-            # =============================================================
-
-            # Mapa de clientes usando as mesmas regras da tela Vendas.
-            def _num_ent(v):
-                if v is None:
-                    return 0
-                if isinstance(v, memoryview):
-                    v = v.tobytes()
-                if isinstance(v, (bytes, bytearray)):
-                    raw = bytes(v).rstrip(b'\\x00')
-                    if not raw:
-                        return 0
-                    try:
-                        txt = raw.decode('ascii').strip()
-                        if txt and txt.isdigit():
-                            return int(txt)
-                    except Exception:
-                        pass
-                    return int.from_bytes(raw, byteorder='little', signed=False)
-                if isinstance(v, str):
-                    if len(v) == 1:
-                        return ord(v)
-                    s = v.strip()
-                    if not s:
-                        return 0
-                    try:
-                        return int(s)
-                    except Exception:
-                        return 0
-                try:
-                    return int(v)
-                except Exception:
-                    return 0
-
-            def _id_chaves_ent(v):
-                chaves = []
-                if v is None:
-                    return chaves
-                try:
-                    bruto = str(v).strip()
-                    if bruto:
-                        chaves.append(("raw", bruto))
-                except Exception:
-                    pass
-                n = _num_ent(v)
-                if n:
-                    chaves.append(("num", n))
-                return chaves
-
-            cliente_map = {}
-            cliente_raw_map = {}
-            cur.execute("SELECT IDCliente, Nome FROM tblClientes")
-            for r in cur.fetchall():
-                nome = str(r[1] or "").strip()
-                if not nome:
-                    continue
-                for tipo, chave in _id_chaves_ent(r[0]):
-                    if tipo == "num":
-                        cliente_map[chave] = nome
-                    else:
-                        cliente_raw_map[chave] = nome
-
-            def _resolver_cliente_ent(valor_id):
-                # Resolve diretamente em tblClientes. A Entregas usa a mesma
-                # origem da Venda e não cria/edita nenhum vínculo.
-                cid = _num_ent(valor_id)
-                if cid:
-                    try:
-                        cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=? LIMIT 1", [cid])
-                        row_cliente = cur.fetchone()
-                        if row_cliente and row_cliente[0]:
-                            nome = str(row_cliente[0]).strip()
-                            if nome:
-                                return nome, cid
-                    except Exception:
-                        try:
-                            conn.rollback()
-                        except Exception:
-                            pass
-
-                if cid and cid in cliente_map:
-                    return cliente_map[cid], cid
-                try:
-                    bruto = str(valor_id).strip()
-                except Exception:
-                    bruto = ""
-                if bruto and bruto in cliente_raw_map:
-                    return cliente_raw_map[bruto], cid
-                return "", cid
-
-            # A venda nasce do agendamento. Guardamos os dois caminhos de
-            # vínculo para recuperar o cliente quando o IDCliente da venda
-            # antiga não resolver diretamente.
-            cur.execute("SELECT IDVendas, IDAgendamento, IDCliente FROM tblAgendamentos")
-            ag_venda_cliente = {}
-            ag_venda_raw = {}
-            ag_agendamento_cliente = {}
-            ag_agendamento_raw = {}
-            for r in cur.fetchall():
-                idv_raw, aid_raw, cid_raw = r[0], r[1], r[2]
-                idv = _num_ent(idv_raw)
-                aid = _num_ent(aid_raw)
-                cid = _num_ent(cid_raw)
-                if idv:
-                    ag_venda_cliente[idv] = cid
-                try:
-                    raw = str(idv_raw).strip() if idv_raw is not None else ""
-                except Exception:
-                    raw = ""
-                if raw:
-                    ag_venda_raw[raw] = cid_raw
-                if aid:
-                    ag_agendamento_cliente[aid] = cid
-                try:
-                    raw = str(aid_raw).strip() if aid_raw is not None else ""
-                except Exception:
-                    raw = ""
-                if raw:
-                    ag_agendamento_raw[raw] = cid_raw
-
-            status_map = {}
-            try:
-                cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
-                status_map = {access_int(r[0]): str(r[1] or "").strip() for r in cur.fetchall()}
-            except Exception:
-                status_map = {}
-
-            # MESMA LEITURA DA TELA VENDAS: sem JOIN e sem WHERE IDEvento.
+        if evento_id:
+            eid = access_int(evento_id)
             cur.execute("""
-                SELECT IDVenda, DataVenda, IDCliente, IDEvento,
-                       QtdProvas, ValorFinal, Finalizado,
-                       DataFinalizacao, StatusPagamento, IDStatusVenda,
-                       IDAgendamento
-                FROM tblVendaPacotes
-                ORDER BY IDVenda DESC
-            """)
+                SELECT V.IDVenda, V.IDCliente, C.Nome AS Atleta,
+                       C.Telefone, C.Contato, V.IDEvento, E.NomeEvento,
+                       E.DataEvento, V.QtdProvas, V.ValorFinal,
+                       V.Finalizado, V.DataFinalizacao, V.StatusPagamento
+                FROM (((tblVendaPacotes AS V
+                INNER JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
+                INNER JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
+                LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda)
+                WHERE V.IDEvento=?
+                  AND (S.StatusVenda Is Null OR UCASE(S.StatusVenda) NOT LIKE '%CANCEL%')
+                ORDER BY C.Nome, V.IDVenda
+            """, [eid])
             vendas = cur.fetchall()
 
-            termo = search.lower()
+            # Pagamentos registrados. Uma venda pode ter mais de um pagamento.
+            cur.execute("SELECT IDVenda FROM tblPagamento")
+            pagos = set()
+            for r in cur.fetchall():
+                try:
+                    pagos.add(access_int(r[0]))
+                except Exception:
+                    pass
 
+            termo = search.lower()
             for r in vendas:
                 id_venda = access_int(r[0])
-                id_cliente_raw = r[2]
-                id_evento_raw = r[3]
-                id_agendamento_raw = r[10]
-                id_evento = access_int(id_evento_raw)
-
-                # O filtro acontece DEPOIS da normalização do ID, não no SQL.
-                if id_evento != evento_selecionado:
-                    continue
-
-                atleta, cliente_id = _resolver_cliente_ent(id_cliente_raw)
-                telefone = ""
-                contato = ""
-
-                # Caminho principal: VENDA -> AGENDAMENTO -> CLIENTE.
-                if not atleta and id_venda:
-                    cid_ag = ag_venda_cliente.get(id_venda, 0)
-                    if cid_ag:
-                        atleta = cliente_map.get(cid_ag, "")
-                        if atleta:
-                            cliente_id = cid_ag
-
-                if not atleta and id_venda:
-                    try:
-                        venda_txt = str(r[0]).strip() if r[0] is not None else ""
-                    except Exception:
-                        venda_txt = ""
-                    if venda_txt:
-                        cid_raw = ag_venda_raw.get(venda_txt)
-                        if cid_raw is not None:
-                            atleta, cliente_id = _resolver_cliente_ent(cid_raw)
-
-                # Fallback: VENDA -> IDAgendamento -> CLIENTE.
-                id_agendamento = _num_ent(id_agendamento_raw)
-                if not atleta and id_agendamento:
-                    cid_ag = ag_agendamento_cliente.get(id_agendamento, 0)
-                    if cid_ag:
-                        atleta = cliente_map.get(cid_ag, "")
-                        if atleta:
-                            cliente_id = cid_ag
-
-                if not atleta:
-                    try:
-                        aid_txt = str(id_agendamento_raw).strip() if id_agendamento_raw is not None else ""
-                    except Exception:
-                        aid_txt = ""
-                    if aid_txt:
-                        cid_raw = ag_agendamento_raw.get(aid_txt)
-                        if cid_raw is not None:
-                            atleta, cliente_id = _resolver_cliente_ent(cid_raw)
-
-                # Último recurso no PostgreSQL, mantendo a mesma estratégia da
-                # tela Vendas para IDs antigos que não sejam reproduzidos pelo
-                # valor normalizado em Python.
-                if not atleta and id_venda and _is_postgres():
-                    try:
-                        cur.execute("""
-                            SELECT A.IDCliente
-                            FROM tblAgendamentos AS A
-                            WHERE CAST(A.IDVendas AS TEXT)=CAST(? AS TEXT)
-                            ORDER BY A.IDAgendamento DESC
-                            LIMIT 1
-                        """, [id_venda])
-                        ag_row = cur.fetchone()
-                        if ag_row:
-                            atleta, cliente_id = _resolver_cliente_ent(ag_row[0])
-                            if not atleta:
-                                cur.execute("""
-                                    SELECT Nome FROM tblClientes
-                                    WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
-                                    LIMIT 1
-                                """, [ag_row[0]])
-                                cr = cur.fetchone()
-                                if cr and cr[0]:
-                                    atleta = str(cr[0]).strip()
-                    except Exception:
-                        pass
-
-                if not atleta and id_agendamento_raw is not None and _is_postgres():
-                    try:
-                        cur.execute("""
-                            SELECT A.IDCliente
-                            FROM tblAgendamentos AS A
-                            WHERE CAST(A.IDAgendamento AS TEXT)=CAST(? AS TEXT)
-                            ORDER BY A.IDAgendamento DESC
-                            LIMIT 1
-                        """, [id_agendamento_raw])
-                        ag_row = cur.fetchone()
-                        if ag_row:
-                            atleta, cliente_id = _resolver_cliente_ent(ag_row[0])
-                            if not atleta:
-                                cur.execute("""
-                                    SELECT Nome FROM tblClientes
-                                    WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
-                                    LIMIT 1
-                                """, [ag_row[0]])
-                                cr = cur.fetchone()
-                                if cr and cr[0]:
-                                    atleta = str(cr[0]).strip()
-                    except Exception:
-                        pass
-
-                # Recupera telefone/contato somente depois de descobrir o
-                # cliente. Esses campos são apenas auxiliares da tela.
-                if cliente_id:
-                    try:
-                        cur.execute("""
-                            SELECT Telefone, Contato
-                            FROM tblClientes
-                            WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
-                            LIMIT 1
-                        """, [cliente_id])
-                        cr = cur.fetchone()
-                        if cr:
-                            telefone = str(cr[0] or "")
-                            contato = str(cr[1] or "")
-                    except Exception:
-                        pass
-
-                status_pagamento = str(r[8] or "aberto").strip().lower()
-
                 item = {
                     "id": id_venda,
-                    "cliente_id": cliente_id,
-                    "atleta": atleta,
-                    "telefone": telefone,
-                    "contato": contato,
-                    "evento_id": id_evento,
-                    "evento": evento_nome,
-                    "data_evento": evento_data,
-                    "provas": access_int(r[4]),
-                    "valor": money(r[5]),
-                    "entregue": bool(r[6]) if r[6] is not None else False,
-                    "data_finalizacao": (
-                        r[7].strftime("%d/%m/%Y")
-                        if hasattr(r[7], "strftime")
-                        else str(r[7] or "")
-                    ),
-                    "status_pagamento": status_pagamento,
-                    "pago": status_pagamento == "pago",
-                    "cortesia": status_pagamento == "cortesia"
+                    "cliente_id": access_int(r[1]),
+                    "atleta": str(r[2] or ""),
+                    "telefone": str(r[3] or ""),
+                    "contato": str(r[4] or ""),
+                    "evento_id": access_int(r[5]),
+                    "evento": str(r[6] or ""),
+                    "data_evento": r[7].strftime("%d/%m/%Y") if hasattr(r[7], "strftime") else str(r[7] or ""),
+                    "provas": access_int(r[8]),
+                    "valor": money(r[9]),
+                    "entregue": bool(r[10]) if r[10] is not None else False,
+                    "data_finalizacao": r[11].strftime("%d/%m/%Y") if hasattr(r[11], "strftime") else str(r[11] or ""),
+                    "status_pagamento": str(r[12] or "aberto").strip().lower(),
+                    "pago": str(r[12] or "aberto").strip().lower() == "pago",
+                    "cortesia": str(r[12] or "aberto").strip().lower() == "cortesia"
                 }
-
                 if not termo or termo in (item["atleta"] + " " + item["evento"]).lower():
                     data.append(item)
 
-            print(f"[SGFE-ENTREGAS] evento_selecionado={evento_selecionado} vendas_exibidas={len(data)}")
-            for item in data:
-                if not item["atleta"]:
-                    print(f"[SGFE-ENTREGAS] atleta_nao_localizado venda={item['id']} cliente={item['cliente_id']}")
-
-    except Exception as e:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        erro = str(e)
-        data = []
-        print(f"[SGFE-ENTREGAS] ERRO_LISTAGEM={e}")
     finally:
         conn.close()
 
     return render_template(
         "entregas.html", page="entregas", title="Entregas",
         subtitle="Controle de entrega das fotos e situação do pagamento",
-        eventos=eventos, evento_selecionado=evento_selecionado,
+        eventos=eventos, evento_selecionado=access_int(evento_id) if evento_id else 0,
         data=data, search=search, mensagem=mensagem, erro=erro,
         formas_pagamento=formas_pagamento
     )
