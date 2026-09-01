@@ -4259,6 +4259,11 @@ def web_vendas():
             return int.from_bytes(raw, byteorder="little", signed=False)
 
         if isinstance(v, str):
+            # IDs migrados como um único caractere: o code point é o ID.
+            # Ex.: '4'=52, '5'=53, '\\t'=9, '\\x1f'=31, 'ć'=263.
+            if len(v) == 1:
+                return ord(v)
+
             s = v.strip()
             if not s:
                 return 0
@@ -4878,25 +4883,6 @@ html, body{
     flex:0 0 auto !important;
     white-space:nowrap !important;
 }
-
-/* ÚNICO AJUSTE: botão NOVA VENDA.
-   Não altera os outros botões nem qualquer regra do sistema. */
-.module-top .actions .action-btn{
-    width:190px !important;
-    min-width:190px !important;
-    max-width:190px !important;
-    height:48px !important;
-    min-height:48px !important;
-    max-height:48px !important;
-    padding:0 16px !important;
-    font-size:16px !important;
-    line-height:48px !important;
-    display:inline-flex !important;
-    align-items:center !important;
-    justify-content:center !important;
-    box-sizing:border-box !important;
-    margin:0 24px 0 0 !important;
-}
 </style>
 
 <script>
@@ -5006,6 +4992,46 @@ html, body{
         const frase='Escolha o evento para visualizar somente as vendas/pacotes dele.';
         const evento=document.querySelector('select[name="evento"]');
         if(!evento) return;
+
+        /* FILTRO DE EVENTO: a troca do evento precisa efetivamente
+           recarregar /vendas com ?evento=ID.
+           Mantemos a pesquisa q, quando existir.
+           Não altera os nomes dos atletas nem qualquer dado da venda. */
+        /* FILTRO DE EVENTO - versão robusta.
+           O listener é delegado no document para continuar funcionando mesmo
+           se algum script reconstruir o <select> depois do carregamento.
+           A mudança também é colocada em onchange como segunda camada. */
+        function aplicarFiltroEvento(el){
+            if(!el) return;
+            const valor=String(el.value || '').trim();
+            const url=new URL(window.location.href);
+            url.pathname='/vendas';
+            if(valor && valor !== '0'){
+                url.searchParams.set('evento',valor);
+            }else{
+                url.searchParams.delete('evento');
+            }
+            const q=url.searchParams.get('q');
+            if(q) url.searchParams.set('q',q);
+            else url.searchParams.delete('q');
+            window.location.assign(url.toString());
+        }
+
+        if(!window.__sgfeFiltroEventoDelegado){
+            window.__sgfeFiltroEventoDelegado=true;
+            document.addEventListener('change',function(e){
+                const alvo=e.target;
+                if(alvo && alvo.matches && alvo.matches('select[name="evento"]')){
+                    e.stopPropagation();
+                    aplicarFiltroEvento(alvo);
+                }
+            },true);
+        }
+
+        if(!evento.dataset.sgfeFiltroEventoAtivo){
+            evento.dataset.sgfeFiltroEventoAtivo='1';
+            evento.onchange=function(){ aplicarFiltroEvento(this); };
+        }
 
         removerContadorVendas();
 
@@ -6351,6 +6377,37 @@ def web_entregas():
             # =============================================================
 
             # Mapa de clientes usando as mesmas regras da tela Vendas.
+            def _num_ent(v):
+                if v is None:
+                    return 0
+                if isinstance(v, memoryview):
+                    v = v.tobytes()
+                if isinstance(v, (bytes, bytearray)):
+                    raw = bytes(v).rstrip(b'\\x00')
+                    if not raw:
+                        return 0
+                    try:
+                        txt = raw.decode('ascii').strip()
+                        if txt and txt.isdigit():
+                            return int(txt)
+                    except Exception:
+                        pass
+                    return int.from_bytes(raw, byteorder='little', signed=False)
+                if isinstance(v, str):
+                    if len(v) == 1:
+                        return ord(v)
+                    s = v.strip()
+                    if not s:
+                        return 0
+                    try:
+                        return int(s)
+                    except Exception:
+                        return 0
+                try:
+                    return int(v)
+                except Exception:
+                    return 0
+
             def _id_chaves_ent(v):
                 chaves = []
                 if v is None:
@@ -6361,7 +6418,7 @@ def web_entregas():
                         chaves.append(("raw", bruto))
                 except Exception:
                     pass
-                n = access_int(v)
+                n = _num_ent(v)
                 if n:
                     chaves.append(("num", n))
                 return chaves
@@ -6382,7 +6439,7 @@ def web_entregas():
             def _resolver_cliente_ent(valor_id):
                 # Resolve diretamente em tblClientes. A Entregas usa a mesma
                 # origem da Venda e não cria/edita nenhum vínculo.
-                cid = access_int(valor_id)
+                cid = _num_ent(valor_id)
                 if cid:
                     try:
                         cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=? LIMIT 1", [cid])
@@ -6417,9 +6474,9 @@ def web_entregas():
             ag_agendamento_raw = {}
             for r in cur.fetchall():
                 idv_raw, aid_raw, cid_raw = r[0], r[1], r[2]
-                idv = access_int(idv_raw)
-                aid = access_int(aid_raw)
-                cid = access_int(cid_raw)
+                idv = _num_ent(idv_raw)
+                aid = _num_ent(aid_raw)
+                cid = _num_ent(cid_raw)
                 if idv:
                     ag_venda_cliente[idv] = cid
                 try:
@@ -6491,7 +6548,7 @@ def web_entregas():
                             atleta, cliente_id = _resolver_cliente_ent(cid_raw)
 
                 # Fallback: VENDA -> IDAgendamento -> CLIENTE.
-                id_agendamento = access_int(id_agendamento_raw)
+                id_agendamento = _num_ent(id_agendamento_raw)
                 if not atleta and id_agendamento:
                     cid_ag = ag_agendamento_cliente.get(id_agendamento, 0)
                     if cid_ag:
