@@ -2120,7 +2120,7 @@ def api_evento_geral():
             cur.execute("""
                 SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
                 FROM tblEvento
-                WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)
+                WHERE IDEvento=?
             """, [str(evento_id)])
 
             r = cur.fetchone()
@@ -2140,7 +2140,7 @@ def api_evento_geral():
                 # -------------------------------------------------
                 resumo["agendamentos"] = int(scalar(
                     cur,
-                    "SELECT Count(*) FROM tblAgendamentos WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)",
+                    "SELECT Count(*) FROM tblAgendamentos WHERE IDEvento=?",
                     0,
                     [str(evento_id)]
                 ) or 0)
@@ -2152,7 +2152,7 @@ def api_evento_geral():
                     SELECT V.IDVenda, V.ValorFinal, V.Finalizado,
                            V.StatusPagamento
                     FROM tblVendaPacotes AS V
-                    WHERE CAST(V.IDEvento AS TEXT)=CAST(? AS TEXT)
+                    WHERE V.IDEvento=?
                 """, [str(evento_id)])
 
                 vendas_evento = cur.fetchall()
@@ -4191,7 +4191,7 @@ def api_precos(evento_id):
         cur=conn.cursor()
         cur.execute("""
         SELECT QtdProvas,Valor FROM tblPrecoEvento
-        WHERE CAST(IdEvento AS TEXT)=CAST(? AS TEXT) ORDER BY QtdProvas
+        WHERE IdEvento=? ORDER BY QtdProvas
         """,[evento_id])
         return jsonify([{"qtd":r[0],"valor":float(r[1] or 0)} for r in cur.fetchall()])
     finally:
@@ -4434,28 +4434,49 @@ def web_vendas():
         cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
         status_map = {_num(r[0]): _txt(r[1]) for r in cur.fetchall()}
 
-        # A venda é lida diretamente, sem JOIN por IDs e SEM WHERE IDEvento.
-        # Esta é a mesma estratégia usada pela tela ENTREGAS, que já está
-        # funcionando corretamente. No PostgreSQL, IDEvento é character varying
-        # e alguns registros antigos podem ter representações diferentes.
-        # Por isso o filtro é feito em Python, depois de normalizar o ID.
-        cur.execute("""
-            SELECT
-                IDVenda,
-                DataVenda,
-                IDCliente,
-                IDEvento,
-                QtdProvas,
-                ValorPacote,
-                ValorDesconto,
-                ValorFinal,
-                IDStatusVenda,
-                IDAgendamento,
-                Finalizado,
-                DataFinalizacao
-            FROM tblVendaPacotes
-            ORDER BY IDVenda DESC
-        """)
+        # A venda é lida diretamente, sem JOIN por IDs. A mesma estratégia
+        # usada na tela de ATLETAS é aplicada aqui: ler por posição e depois
+        # montar aliases para o template.
+        # FILTRO DE EVENTO: usa a mesma lógica da app.py que já funcionava.
+        # A venda continua sendo lida diretamente, sem JOIN por IDs, para
+        # preservar a correção dos nomes dos atletas.
+        if evento_selecionado:
+            cur.execute("""
+                SELECT
+                    IDVenda,
+                    DataVenda,
+                    IDCliente,
+                    IDEvento,
+                    QtdProvas,
+                    ValorPacote,
+                    ValorDesconto,
+                    ValorFinal,
+                    IDStatusVenda,
+                    IDAgendamento,
+                    Finalizado,
+                    DataFinalizacao
+                FROM tblVendaPacotes
+                WHERE IDEvento=?
+                ORDER BY IDVenda DESC
+            """, [evento_selecionado])
+        else:
+            cur.execute("""
+                SELECT
+                    IDVenda,
+                    DataVenda,
+                    IDCliente,
+                    IDEvento,
+                    QtdProvas,
+                    ValorPacote,
+                    ValorDesconto,
+                    ValorFinal,
+                    IDStatusVenda,
+                    IDAgendamento,
+                    Finalizado,
+                    DataFinalizacao
+                FROM tblVendaPacotes
+                ORDER BY IDVenda DESC
+            """)
 
         for r in cur.fetchall():
             venda_id = _num(r[0])
@@ -4463,10 +4484,9 @@ def web_vendas():
             evento_id = _num(r[3])
             status_id = _num(r[8])
 
-            # FILTRO DE EVENTO: exatamente como na tela ENTREGAS.
-            # Só compara depois que IDEvento foi normalizado em Python.
-            if evento_selecionado and evento_id != evento_selecionado:
-                continue
+            # O filtro por evento já foi aplicado no SQL acima.
+            # Não filtramos novamente em Python, preservando a lógica de
+            # recuperação dos nomes dos atletas.
 
             atleta, cliente_id = _resolver_cliente(r[2])
 
@@ -4890,20 +4910,6 @@ html, body{
     flex:0 0 auto !important;
     white-space:nowrap !important;
 }
-
-/* AJUSTE PONTUAL: somente o botão NOVA VENDA.
-   Mantém a posição do cabeçalho e reduz discretamente tamanho e altura. */
-.module-top .action-btn.sgfe-vendas-nova-venda{
-    width:205px !important;
-    min-width:205px !important;
-    max-width:205px !important;
-    height:52px !important;
-    min-height:52px !important;
-    padding:0 16px !important;
-    font-size:18px !important;
-    line-height:1 !important;
-    box-sizing:border-box !important;
-}
 </style>
 
 <script>
@@ -4993,12 +4999,6 @@ html, body{
                 return t===nome || (nome==='NOVA' && t.indexOf('NOVA')>=0);
             });
             if(!alvo) return;
-
-            /* Identifica somente o botão NOVA VENDA para o ajuste visual.
-               Nenhum outro botão da tela é alterado. */
-            if(t.indexOf('NOVA VENDA')>=0){
-                el.classList.add('sgfe-vendas-nova-venda');
-            }
 
             let pai=el.parentElement;
             let melhor=null;
