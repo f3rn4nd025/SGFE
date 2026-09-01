@@ -4310,7 +4310,10 @@ def web_vendas():
         """)
         evento_map = {}
         for r in cur.fetchall():
-            eid = _num(r[0])
+            # IMPORTANTE: o filtro antigo que funcionava usava access_int().
+            # Mantemos isso aqui para o ID escolhido no combo ser o mesmo ID
+            # usado em tblVendaPacotes.
+            eid = access_int(r[0])
             evento_map[eid] = {
                 "id": eid,
                 "nome": _txt(r[1]),
@@ -4322,7 +4325,8 @@ def web_vendas():
 
         if evento_param:
             try:
-                candidato = _num(evento_param)
+                # Mesma conversão da versão em que o filtro funcionava.
+                candidato = access_int(evento_param)
             except Exception:
                 candidato = 0
             if candidato in evento_map:
@@ -4433,23 +4437,46 @@ def web_vendas():
         # A venda é lida diretamente, sem JOIN por IDs. A mesma estratégia
         # usada na tela de ATLETAS é aplicada aqui: ler por posição e depois
         # montar aliases para o template.
-        cur.execute("""
-            SELECT
-                IDVenda,
-                DataVenda,
-                IDCliente,
-                IDEvento,
-                QtdProvas,
-                ValorPacote,
-                ValorDesconto,
-                ValorFinal,
-                IDStatusVenda,
-                IDAgendamento,
-                Finalizado,
-                DataFinalizacao
-            FROM tblVendaPacotes
-            ORDER BY IDVenda DESC
-        """)
+        # FILTRO DE EVENTO: usa a mesma lógica da app.py que já funcionava.
+        # A venda continua sendo lida diretamente, sem JOIN por IDs, para
+        # preservar a correção dos nomes dos atletas.
+        if evento_selecionado:
+            cur.execute("""
+                SELECT
+                    IDVenda,
+                    DataVenda,
+                    IDCliente,
+                    IDEvento,
+                    QtdProvas,
+                    ValorPacote,
+                    ValorDesconto,
+                    ValorFinal,
+                    IDStatusVenda,
+                    IDAgendamento,
+                    Finalizado,
+                    DataFinalizacao
+                FROM tblVendaPacotes
+                WHERE IDEvento=?
+                ORDER BY IDVenda DESC
+            """, [evento_selecionado])
+        else:
+            cur.execute("""
+                SELECT
+                    IDVenda,
+                    DataVenda,
+                    IDCliente,
+                    IDEvento,
+                    QtdProvas,
+                    ValorPacote,
+                    ValorDesconto,
+                    ValorFinal,
+                    IDStatusVenda,
+                    IDAgendamento,
+                    Finalizado,
+                    DataFinalizacao
+                FROM tblVendaPacotes
+                ORDER BY IDVenda DESC
+            """)
 
         for r in cur.fetchall():
             venda_id = _num(r[0])
@@ -4457,9 +4484,9 @@ def web_vendas():
             evento_id = _num(r[3])
             status_id = _num(r[8])
 
-            # Mantém o filtro por evento exatamente como no sistema local.
-            if evento_selecionado and evento_id != evento_selecionado:
-                continue
+            # O filtro por evento já foi aplicado no SQL acima.
+            # Não filtramos novamente em Python, preservando a lógica de
+            # recuperação dos nomes dos atletas.
 
             atleta, cliente_id = _resolver_cliente(r[2])
 
