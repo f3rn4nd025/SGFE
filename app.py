@@ -4625,6 +4625,16 @@ def web_vendas():
                 "data_finalizacao": _txt(r[11]),
             }
 
+            # TRAVA FINAL DO FILTRO DE EVENTO
+            # A seleção da tela é obrigatória para a lista: se há um evento
+            # selecionado, somente vendas daquele evento entram em `data`.
+            if evento_selecionado:
+                evento_nome_selecionado = evento_map.get(
+                    evento_selecionado, {}
+                ).get("nome", "").strip()
+                if evento_nome_selecionado and evento_nome.strip() != evento_nome_selecionado:
+                    continue
+
             if search:
                 alvo = " ".join([
                     str(atleta), str(evento_nome), str(status_nome),
