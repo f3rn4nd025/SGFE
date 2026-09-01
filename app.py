@@ -4997,25 +4997,40 @@ html, body{
            recarregar /vendas com ?evento=ID.
            Mantemos a pesquisa q, quando existir.
            Não altera os nomes dos atletas nem qualquer dado da venda. */
+        /* FILTRO DE EVENTO - versão robusta.
+           O listener é delegado no document para continuar funcionando mesmo
+           se algum script reconstruir o <select> depois do carregamento.
+           A mudança também é colocada em onchange como segunda camada. */
+        function aplicarFiltroEvento(el){
+            if(!el) return;
+            const valor=String(el.value || '').trim();
+            const url=new URL(window.location.href);
+            url.pathname='/vendas';
+            if(valor && valor !== '0'){
+                url.searchParams.set('evento',valor);
+            }else{
+                url.searchParams.delete('evento');
+            }
+            const q=url.searchParams.get('q');
+            if(q) url.searchParams.set('q',q);
+            else url.searchParams.delete('q');
+            window.location.assign(url.toString());
+        }
+
+        if(!window.__sgfeFiltroEventoDelegado){
+            window.__sgfeFiltroEventoDelegado=true;
+            document.addEventListener('change',function(e){
+                const alvo=e.target;
+                if(alvo && alvo.matches && alvo.matches('select[name="evento"]')){
+                    e.stopPropagation();
+                    aplicarFiltroEvento(alvo);
+                }
+            },true);
+        }
+
         if(!evento.dataset.sgfeFiltroEventoAtivo){
             evento.dataset.sgfeFiltroEventoAtivo='1';
-            evento.addEventListener('change',function(){
-                const valor=(evento.value || '').trim();
-                const url=new URL(window.location.href);
-                url.pathname='/vendas';
-                if(valor){
-                    url.searchParams.set('evento',valor);
-                }else{
-                    url.searchParams.delete('evento');
-                }
-                const q=url.searchParams.get('q');
-                if(q){
-                    url.searchParams.set('q',q);
-                }else{
-                    url.searchParams.delete('q');
-                }
-                window.location.href=url.toString();
-            });
+            evento.onchange=function(){ aplicarFiltroEvento(this); };
         }
 
         removerContadorVendas();
