@@ -489,13 +489,6 @@ def aplicar_modal_sgfe(response):
 
         pos = html.lower().rfind('</body>')
         html = html[:pos] + modal_script + html[pos:]
-
-        # ENTREGAS: apenas normaliza a fonte dos dados das linhas da tabela.
-        # Não altera filtro, consultas, rotas, banco ou qualquer ação da tela.
-        if request.path == '/entregas':
-            css_entregas_fonte = "<style id='sgfe-entregas-fonte-normal'>table tbody td, table tbody td * { font-weight: 400 !important; }</style>"
-            html = html[:pos] + css_entregas_fonte + html[pos:]
-
         response.set_data(html)
         return response
     except Exception:
@@ -2127,7 +2120,7 @@ def api_evento_geral():
             cur.execute("""
                 SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
                 FROM tblEvento
-                WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)
+                WHERE IDEvento=?
             """, [str(evento_id)])
 
             r = cur.fetchone()
@@ -2147,7 +2140,7 @@ def api_evento_geral():
                 # -------------------------------------------------
                 resumo["agendamentos"] = int(scalar(
                     cur,
-                    "SELECT Count(*) FROM tblAgendamentos WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)",
+                    "SELECT Count(*) FROM tblAgendamentos WHERE IDEvento=?",
                     0,
                     [str(evento_id)]
                 ) or 0)
@@ -2159,7 +2152,7 @@ def api_evento_geral():
                     SELECT V.IDVenda, V.ValorFinal, V.Finalizado,
                            V.StatusPagamento
                     FROM tblVendaPacotes AS V
-                    WHERE CAST(V.IDEvento AS TEXT)=CAST(? AS TEXT)
+                    WHERE V.IDEvento=?
                 """, [str(evento_id)])
 
                 vendas_evento = cur.fetchall()
@@ -4198,7 +4191,7 @@ def api_precos(evento_id):
         cur=conn.cursor()
         cur.execute("""
         SELECT QtdProvas,Valor FROM tblPrecoEvento
-        WHERE CAST(IdEvento AS TEXT)=CAST(? AS TEXT) ORDER BY QtdProvas
+        WHERE IdEvento=? ORDER BY QtdProvas
         """,[evento_id])
         return jsonify([{"qtd":r[0],"valor":float(r[1] or 0)} for r in cur.fetchall()])
     finally:
@@ -4224,7 +4217,8 @@ def web_vendas():
     data = []
     columns = [
         "IDVenda", "DataVenda", "Atleta", "Evento", "QtdProvas",
-        "ValorPacote", "ValorDesconto", "ValorFinal", "Status"
+        "ValorPacote", "ValorDesconto", "ValorFinal", "Status",
+        "Finalizado", "DataFinalizacao"
     ]
 
     def _txt(v):
@@ -4316,10 +4310,7 @@ def web_vendas():
         """)
         evento_map = {}
         for r in cur.fetchall():
-            # IMPORTANTE: o filtro antigo que funcionava usava access_int().
-            # Mantemos isso aqui para o ID escolhido no combo ser o mesmo ID
-            # usado em tblVendaPacotes.
-            eid = access_int(r[0])
+            eid = _num(r[0])
             evento_map[eid] = {
                 "id": eid,
                 "nome": _txt(r[1]),
@@ -4331,8 +4322,7 @@ def web_vendas():
 
         if evento_param:
             try:
-                # Mesma conversão da versão em que o filtro funcionava.
-                candidato = access_int(evento_param)
+                candidato = _num(evento_param)
             except Exception:
                 candidato = 0
             if candidato in evento_map:
@@ -4440,11 +4430,9 @@ def web_vendas():
         cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
         status_map = {_num(r[0]): _txt(r[1]) for r in cur.fetchall()}
 
-        # A venda é lida diretamente, sem JOIN por IDs e SEM WHERE IDEvento.
-        # Esta é a mesma estratégia usada pela tela ENTREGAS, que já está
-        # funcionando corretamente. No PostgreSQL, IDEvento é character varying
-        # e alguns registros antigos podem ter representações diferentes.
-        # Por isso o filtro é feito em Python, depois de normalizar o ID.
+        # A venda é lida diretamente, sem JOIN por IDs. A mesma estratégia
+        # usada na tela de ATLETAS é aplicada aqui: ler por posição e depois
+        # montar aliases para o template.
         cur.execute("""
             SELECT
                 IDVenda,
@@ -4469,8 +4457,7 @@ def web_vendas():
             evento_id = _num(r[3])
             status_id = _num(r[8])
 
-            # FILTRO DE EVENTO: exatamente como na tela ENTREGAS.
-            # Só compara depois que IDEvento foi normalizado em Python.
+            # Mantém o filtro por evento exatamente como no sistema local.
             if evento_selecionado and evento_id != evento_selecionado:
                 continue
 
@@ -4895,76 +4882,7 @@ html, body{
 .module-top .action-btn{
     flex:0 0 auto !important;
     white-space:nowrap !important;
-    width:180px !important;
-    height:44px !important;
-    min-width:180px !important;
-    padding:0 18px !important;
-    margin:0 24px 0 0 !important;
-    display:inline-flex !important;
-    align-items:center !important;
-    justify-content:center !important;
-    box-sizing:border-box !important;
 }
-/* AJUSTE PONTUAL: ENQUADRAMENTO DA TABELA DE VENDAS/PACOTES
-   Somente faz a tabela caber na largura disponível.
-   Não altera filtro, dados, rotas ou regras de negócio. */
-.sgfe-vendas-tabela-expandida table{
-    width:100% !important;
-    max-width:100% !important;
-    min-width:0 !important;
-    table-layout:fixed !important;
-    box-sizing:border-box !important;
-}
-
-.sgfe-vendas-tabela-expandida table th,
-.sgfe-vendas-tabela-expandida table td{
-    min-width:0 !important;
-    max-width:none !important;
-    overflow:hidden !important;
-    text-overflow:ellipsis !important;
-}
-
-/* AJUSTE PONTUAL: reduz os espaços horizontais entre as colunas.
-   Mantém espaço suficiente para ATLETA e EVENTO. */
-.sgfe-vendas-tabela-expandida table th:nth-child(1),
-.sgfe-vendas-tabela-expandida table td:nth-child(1){ width:60px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(2),
-.sgfe-vendas-tabela-expandida table td:nth-child(2){ width:90px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(3),
-.sgfe-vendas-tabela-expandida table td:nth-child(3){ width:205px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(4),
-.sgfe-vendas-tabela-expandida table td:nth-child(4){ width:220px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(5),
-.sgfe-vendas-tabela-expandida table td:nth-child(5){ width:65px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(6),
-.sgfe-vendas-tabela-expandida table td:nth-child(6){ width:100px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(7),
-.sgfe-vendas-tabela-expandida table td:nth-child(7){ width:100px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(8),
-.sgfe-vendas-tabela-expandida table td:nth-child(8){ width:115px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(9),
-.sgfe-vendas-tabela-expandida table td:nth-child(9){ width:110px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(10),
-.sgfe-vendas-tabela-expandida table td:nth-child(10){ width:110px !important; }
-
-.sgfe-vendas-tabela-expandida table th:nth-child(4),
-.sgfe-vendas-tabela-expandida table td:nth-child(4){
-    white-space:nowrap !important;
-    overflow:hidden !important;
-    text-overflow:clip !important;
-}
-
-.sgfe-vendas-tabela-expandida table th:last-child,
-.sgfe-vendas-tabela-expandida table td:last-child{
-    width:120px !important;
-}
-
-.sgfe-vendas-tabela-expandida table td:last-child .action-btn{
-    min-width:92px !important;
-    width:92px !important;
-    padding:0 8px !important;
-}
-
 </style>
 
 <script>
@@ -5021,75 +4939,6 @@ html, body{
     function organizarTabela(){
         const table=document.querySelector('table');
         if(!table) return;
-
-        /* VENDAS/PACOTES: remove somente a coluna DATA FINALIZAÇÃO
-           e acrescenta o botão EDITAR. A rota /vendas/<id>/editar já existe
-           no backend. Nenhuma regra do filtro ou dos dados é alterada. */
-        const headRow=table.tHead ? table.tHead.rows[0] : table.querySelector('thead tr');
-        if(headRow && !table.dataset.sgfeEdicaoAcoes){
-            const headers=Array.from(headRow.cells);
-            let indiceDataFinalizacao=-1;
-            let indiceData=-1;
-            let indiceAcaoAntiga=-1;
-            headers.forEach(function(cell, i){
-                const t=texto(cell).toUpperCase();
-                if(t==='DATA FINALIZAÇÃO' || t==='DATA FINALIZACAO') indiceDataFinalizacao=i;
-                if(t==='DATA') indiceData=i;
-                if(t==='AÇÃO' || t==='ACAO') indiceAcaoAntiga=i;
-            });
-
-            if(indiceDataFinalizacao>=0){
-                Array.from(table.rows).forEach(function(row){
-                    if(row.cells[indiceDataFinalizacao]) row.cells[indiceDataFinalizacao].style.display='none';
-                });
-            }
-
-            /* Retira somente a coluna DATA da visualização para liberar espaço
-               para EVENTO e para o botão EDITAR. Nenhuma regra de dados é alterada. */
-            if(indiceData>=0){
-                Array.from(table.rows).forEach(function(row){
-                    if(row.cells[indiceData]) row.cells[indiceData].style.display='none';
-                });
-            }
-
-            /* Remove somente a coluna AÇÃO antiga, deixando apenas o novo EDITAR
-               na coluna AÇÕES. */
-            if(indiceAcaoAntiga>=0){
-                Array.from(table.rows).forEach(function(row){
-                    if(row.cells[indiceAcaoAntiga]) row.cells[indiceAcaoAntiga].style.display='none';
-                });
-            }
-
-            const th=document.createElement('th');
-            th.textContent='AÇÕES';
-            th.style.whiteSpace='nowrap';
-            headRow.appendChild(th);
-
-            const rows=Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); });
-            rows.forEach(function(row){
-                const td=document.createElement('td');
-                td.style.whiteSpace='nowrap';
-
-                let id='';
-                const primeira=row.cells[0];
-                if(primeira){
-                    const m=texto(primeira).match(/\d+/);
-                    if(m) id=m[0];
-                }
-
-                if(id){
-                    const a=document.createElement('a');
-                    a.href='/vendas/'+encodeURIComponent(id)+'/editar';
-                    a.textContent='✎ EDITAR';
-                    a.className='action-btn';
-                    a.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:92px;height:38px;padding:0 14px;margin:0;box-sizing:border-box;';
-                    td.appendChild(a);
-                }
-                row.appendChild(td);
-            });
-
-            table.dataset.sgfeEdicaoAcoes='1';
-        }
 
         let box=table.parentElement;
         while(box && box!==document.body){
