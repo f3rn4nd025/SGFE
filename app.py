@@ -7155,26 +7155,151 @@ def web_pagamentos():
             eid = access_int(evento_id)
             evento_map = {ev["id"]: ev for ev in eventos}
 
-            # IMPORTANTE: NÃO filtrar por V.IDEvento dentro do SQL e NÃO
-            # dar JOIN direto com tblEvento aqui. IDEvento é character
-            # varying no PostgreSQL (herança da migração do Access) e
-            # comparar/juntar com um número (access_int) já causou um
-            # "operator does not exist" (erro 500) nesta tela. A mesma
-            # armadilha já foi resolvida assim nas telas VENDAS e
-            # ENTREGAS: buscamos tudo e filtramos o evento em Python,
-            # com o nome/data do evento vindos da lista `eventos` já
-            # carregada acima.
+            # IMPORTANTE: NÃO fazer JOIN direto entre tblVendaPacotes e
+            # outras tabelas (tblEvento, tblClientes, tblStatusVenda) aqui.
+            # Colunas como IDEvento/IDCliente/IDStatusVenda em
+            # tblVendaPacotes são character varying (herança da migração
+            # do Access), enquanto nas tabelas de referência elas podem ser
+            # bigint/integer. O PostgreSQL não compara/junta tipos
+            # diferentes sem CAST explícito e isso já gerou dois erros 500
+            # nesta tela ("operator does not exist"). A mesma armadilha já
+            # foi resolvida assim nas telas VENDAS e ENTREGAS: cada tabela
+            # é lida separadamente e o cruzamento é feito em Python.
+
+            def _num(v):
+                """Normaliza IDs migrados do Access (idêntica à usada na
+                tela VENDAS para cliente/evento/venda)."""
+                if v is None:
+                    return 0
+                if isinstance(v, memoryview):
+                    v = v.tobytes()
+                if isinstance(v, (bytes, bytearray)):
+                    raw = bytes(v).rstrip(b"\x00")
+                    if not raw:
+                        return 0
+                    try:
+                        txt = raw.decode("ascii").strip()
+                        if txt.isdigit():
+                            return int(txt)
+                        if txt.lower().startswith("\\x"):
+                            hx = txt[2:]
+                            if hx and len(hx) % 2 == 0:
+                                return int.from_bytes(bytes.fromhex(hx), "little", signed=False)
+                    except Exception:
+                        pass
+                    return int.from_bytes(raw, byteorder="little", signed=False)
+                if isinstance(v, str):
+                    if len(v) == 1:
+                        return ord(v)
+                    s = v.strip()
+                    if not s:
+                        return 0
+                    try:
+                        return int(s)
+                    except Exception:
+                        pass
+                    if s.lower().startswith("\\x"):
+                        try:
+                            hx = s[2:]
+                            if hx and len(hx) % 2 == 0:
+                                return int.from_bytes(bytes.fromhex(hx), "little", signed=False)
+                        except Exception:
+                            pass
+                    try:
+                        raw = s.encode("latin1").rstrip(b"\x00")
+                        if raw:
+                            return int.from_bytes(raw, byteorder="little", signed=False)
+                    except Exception:
+                        pass
+                    return 0
+                try:
+                    return int(v)
+                except Exception:
+                    return 0
+
+            def _num_status(v):
+                """Normaliza IDStatusVenda: tenta o dígito literal primeiro
+                (é assim que a edição de venda grava), só decodifica como
+                code point se não for um número válido (registros antigos
+                migrados do Access)."""
+                if v is None:
+                    return 0
+                if isinstance(v, (bytes, bytearray, memoryview)):
+                    return _num(v)
+                if isinstance(v, str):
+                    s = v.strip()
+                    if not s:
+                        return 0
+                    try:
+                        return int(s)
+                    except Exception:
+                        pass
+                    if len(s) == 1:
+                        return ord(s)
+                    return 0
+                try:
+                    return int(v)
+                except Exception:
+                    return 0
+
+            def _txt(v):
+                if v is None:
+                    return ""
+                if hasattr(v, "strftime"):
+                    return v.strftime("%d/%m/%Y")
+                return str(v)
+
+            # Clientes (nome/telefone/contato), por ID normalizado e também
+            # pela representação textual bruta, igual à tela VENDAS.
+            cur.execute("SELECT IDCliente, Nome, Telefone, Contato FROM tblClientes")
+            cliente_map = {}
+            cliente_raw_map = {}
+            for r in cur.fetchall():
+                info = {"nome": _txt(r[1]), "telefone": _txt(r[2]), "contato": _txt(r[3])}
+                n = _num(r[0])
+                if n:
+                    cliente_map[n] = info
+                bruto = str(r[0]).strip() if r[0] is not None else ""
+                if bruto:
+                    cliente_raw_map[bruto] = info
+
+            # Vínculo VENDA -> AGENDAMENTO -> CLIENTE, para vendas antigas
+            # cujo IDCliente gravado na própria venda não localiza o nome
+            # diretamente (mesmo fallback usado na tela VENDAS).
+            cur.execute("SELECT IDVendas, IDCliente FROM tblAgendamentos")
+            agendamento_venda_cliente_map = {}
+            for r in cur.fetchall():
+                idv = _num(r[0])
+                if idv:
+                    agendamento_venda_cliente_map[idv] = _num(r[1])
+
+            def _resolver_cliente(venda_id, cliente_id_raw):
+                cid = _num(cliente_id_raw)
+                info = cliente_map.get(cid)
+                if info and info["nome"]:
+                    return info
+                bruto = str(cliente_id_raw).strip() if cliente_id_raw is not None else ""
+                if bruto and bruto in cliente_raw_map and cliente_raw_map[bruto]["nome"]:
+                    return cliente_raw_map[bruto]
+                cid_ag = agendamento_venda_cliente_map.get(venda_id)
+                if cid_ag:
+                    info2 = cliente_map.get(cid_ag)
+                    if info2 and info2["nome"]:
+                        return info2
+                return {"nome": "", "telefone": "", "contato": ""}
+
+            # Nomes de status, só para identificar e excluir vendas
+            # CANCELADAS (mesmo critério que estava no SQL original).
+            cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
+            status_nome_map = {_num_status(r[0]): _txt(r[1]) for r in cur.fetchall()}
+
             cur.execute("""
-                SELECT V.IDVenda, V.DataVenda, V.IDEvento, C.Nome AS Atleta,
-                       C.Telefone, C.Contato,
-                       V.QtdProvas, V.ValorFinal, V.Finalizado, V.StatusPagamento
-                FROM (tblVendaPacotes AS V
-                INNER JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
-                LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda
-                WHERE (S.StatusVenda Is Null OR UCASE(S.StatusVenda) NOT LIKE '%CANCEL%')
-                ORDER BY C.Nome, V.IDVenda
+                SELECT IDVenda, DataVenda, IDCliente, IDEvento, QtdProvas,
+                       ValorFinal, Finalizado, StatusPagamento, IDStatusVenda
+                FROM tblVendaPacotes
+                ORDER BY IDVenda
             """)
-            vendas = [r for r in cur.fetchall() if access_int(r[2]) == eid]
+            vendas = [r for r in cur.fetchall() if access_int(r[3]) == eid]
 
             # Soma o que já foi recebido por venda. A estrutura aceita mais de
             # um registro histórico de pagamento, mesmo que o fluxo atual
@@ -7194,8 +7319,14 @@ def web_pagamentos():
             termo = search.lower()
             for r in vendas:
                 id_venda = access_int(r[0])
-                valor = float(r[7] or 0)
-                status_registrado = str(r[9] or "aberto").strip().lower()
+
+                status_venda_nome = status_nome_map.get(_num_status(r[8]), "")
+                if "CANCEL" in status_venda_nome.upper():
+                    continue
+
+                cli = _resolver_cliente(id_venda, r[2])
+                valor = float(r[5] or 0)
+                status_registrado = str(r[7] or "aberto").strip().lower()
                 recebido = float(pagamentos.get(id_venda, 0) or 0)
                 if status_registrado == "cortesia":
                     recebido = 0.0
@@ -7215,16 +7346,16 @@ def web_pagamentos():
                     situacao = "aberto"
                     situacao_label = "EM ABERTO"
 
-                ev_info = evento_map.get(access_int(r[2]), {})
+                ev_info = evento_map.get(access_int(r[3]), {})
 
                 item = {
                     "id": id_venda,
-                    "atleta": str(r[3] or ""),
-                    "telefone": str(r[4] or ""),
-                    "contato": str(r[5] or ""),
+                    "atleta": cli["nome"],
+                    "telefone": cli["telefone"],
+                    "contato": cli["contato"],
                     "evento": ev_info.get("nome", ""),
                     "data_evento": ev_info.get("data", ""),
-                    "provas": access_int(r[6]),
+                    "provas": access_int(r[4]),
                     "valor": valor,
                     "recebido": recebido,
                     "aberto": aberto,
