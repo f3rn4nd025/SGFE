@@ -4890,6 +4890,20 @@ html, body{
     flex:0 0 auto !important;
     white-space:nowrap !important;
 }
+
+/* AJUSTE PONTUAL: somente o botão NOVA VENDA.
+   Mantém a posição do cabeçalho e reduz discretamente tamanho e altura. */
+.module-top .action-btn.sgfe-vendas-nova-venda{
+    width:205px !important;
+    min-width:205px !important;
+    max-width:205px !important;
+    height:52px !important;
+    min-height:52px !important;
+    padding:0 16px !important;
+    font-size:18px !important;
+    line-height:1 !important;
+    box-sizing:border-box !important;
+}
 </style>
 
 <script>
@@ -4979,6 +4993,12 @@ html, body{
                 return t===nome || (nome==='NOVA' && t.indexOf('NOVA')>=0);
             });
             if(!alvo) return;
+
+            /* Identifica somente o botão NOVA VENDA para o ajuste visual.
+               Nenhum outro botão da tela é alterado. */
+            if(t.indexOf('NOVA VENDA')>=0){
+                el.classList.add('sgfe-vendas-nova-venda');
+            }
 
             let pai=el.parentElement;
             let melhor=null;
