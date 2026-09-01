@@ -489,13 +489,6 @@ def aplicar_modal_sgfe(response):
 
         pos = html.lower().rfind('</body>')
         html = html[:pos] + modal_script + html[pos:]
-
-        # ENTREGAS: apenas normaliza a fonte dos dados das linhas da tabela.
-        # Não altera filtro, consultas, rotas, banco ou qualquer ação da tela.
-        if request.path == '/entregas':
-            css_entregas_fonte = "<style id='sgfe-entregas-fonte-normal'>table tbody td, table tbody td * { font-weight: 400 !important; }</style>"
-            html = html[:pos] + css_entregas_fonte + html[pos:]
-
         response.set_data(html)
         return response
     except Exception:
@@ -4225,7 +4218,7 @@ def web_vendas():
     columns = [
         "IDVenda", "DataVenda", "Atleta", "Evento", "QtdProvas",
         "ValorPacote", "ValorDesconto", "ValorFinal", "Status",
-        "Finalizado"
+        "Finalizado", "DataFinalizacao"
     ]
 
     def _txt(v):
@@ -4896,76 +4889,7 @@ html, body{
 .module-top .action-btn{
     flex:0 0 auto !important;
     white-space:nowrap !important;
-    width:180px !important;
-    height:44px !important;
-    min-width:180px !important;
-    padding:0 18px !important;
-    margin:0 24px 0 0 !important;
-    display:inline-flex !important;
-    align-items:center !important;
-    justify-content:center !important;
-    box-sizing:border-box !important;
 }
-/* AJUSTE PONTUAL: ENQUADRAMENTO DA TABELA DE VENDAS/PACOTES
-   Somente faz a tabela caber na largura disponível.
-   Não altera filtro, dados, rotas ou regras de negócio. */
-.sgfe-vendas-tabela-expandida table{
-    width:100% !important;
-    max-width:100% !important;
-    min-width:0 !important;
-    table-layout:fixed !important;
-    box-sizing:border-box !important;
-}
-
-.sgfe-vendas-tabela-expandida table th,
-.sgfe-vendas-tabela-expandida table td{
-    min-width:0 !important;
-    max-width:none !important;
-    overflow:hidden !important;
-    text-overflow:ellipsis !important;
-}
-
-/* AJUSTE PONTUAL: reduz os espaços horizontais entre as colunas.
-   Mantém espaço suficiente para ATLETA e EVENTO. */
-.sgfe-vendas-tabela-expandida table th:nth-child(1),
-.sgfe-vendas-tabela-expandida table td:nth-child(1){ width:60px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(2),
-.sgfe-vendas-tabela-expandida table td:nth-child(2){ width:90px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(3),
-.sgfe-vendas-tabela-expandida table td:nth-child(3){ width:205px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(4),
-.sgfe-vendas-tabela-expandida table td:nth-child(4){ width:220px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(5),
-.sgfe-vendas-tabela-expandida table td:nth-child(5){ width:65px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(6),
-.sgfe-vendas-tabela-expandida table td:nth-child(6){ width:100px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(7),
-.sgfe-vendas-tabela-expandida table td:nth-child(7){ width:100px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(8),
-.sgfe-vendas-tabela-expandida table td:nth-child(8){ width:115px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(9),
-.sgfe-vendas-tabela-expandida table td:nth-child(9){ width:110px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(10),
-.sgfe-vendas-tabela-expandida table td:nth-child(10){ width:110px !important; }
-
-.sgfe-vendas-tabela-expandida table th:nth-child(4),
-.sgfe-vendas-tabela-expandida table td:nth-child(4){
-    white-space:nowrap !important;
-    overflow:hidden !important;
-    text-overflow:clip !important;
-}
-
-.sgfe-vendas-tabela-expandida table th:last-child,
-.sgfe-vendas-tabela-expandida table td:last-child{
-    width:120px !important;
-}
-
-.sgfe-vendas-tabela-expandida table td:last-child .action-btn{
-    min-width:92px !important;
-    width:92px !important;
-    padding:0 8px !important;
-}
-
 </style>
 
 <script>
@@ -5019,89 +4943,25 @@ html, body{
         });
     }
 
+    function ocultarColunaFinalizado(){
+        /* SOMENTE visual: mantém Finalizado no objeto/SQL para o funcionamento
+           da venda, mas não mostra a coluna na tabela de Vendas / Pacotes. */
+        document.querySelectorAll('table').forEach(function(table){
+            const ths=Array.from(table.querySelectorAll('thead th'));
+            const indice=ths.findIndex(function(th){
+                return texto(th).toUpperCase()==='FINALIZADO';
+            });
+            if(indice < 0) return;
+            ths[indice].style.display='none';
+            table.querySelectorAll('tbody tr').forEach(function(tr){
+                if(tr.children[indice]) tr.children[indice].style.display='none';
+            });
+        });
+    }
+
     function organizarTabela(){
         const table=document.querySelector('table');
         if(!table) return;
-
-        /* VENDAS/PACOTES: remove somente a coluna DATA FINALIZAÇÃO
-           e acrescenta o botão EDITAR. A rota /vendas/<id>/editar já existe
-           no backend. Nenhuma regra do filtro ou dos dados é alterada. */
-        const headRow=table.tHead ? table.tHead.rows[0] : table.querySelector('thead tr');
-        if(headRow && !table.dataset.sgfeEdicaoAcoes){
-            const headers=Array.from(headRow.cells);
-            let indiceDataFinalizacao=-1;
-            let indiceFinalizado=-1;
-            let indiceData=-1;
-            let indiceAcaoAntiga=-1;
-            headers.forEach(function(cell, i){
-                const t=texto(cell).toUpperCase();
-                if(t==='DATA FINALIZAÇÃO' || t==='DATA FINALIZACAO') indiceDataFinalizacao=i;
-                if(t==='FINALIZADO') indiceFinalizado=i;
-                if(t==='DATA') indiceData=i;
-                if(t==='AÇÃO' || t==='ACAO') indiceAcaoAntiga=i;
-            });
-
-            if(indiceDataFinalizacao>=0){
-                Array.from(table.rows).forEach(function(row){
-                    if(row.cells[indiceDataFinalizacao]) row.cells[indiceDataFinalizacao].style.display='none';
-                });
-            }
-
-            /* Retira somente a coluna FINALIZADO da visualização da tabela.
-               O campo continua existindo no banco e nas regras internas do
-               sistema, para não alterar nenhuma função já funcionando. */
-            if(indiceFinalizado>=0){
-                Array.from(table.rows).forEach(function(row){
-                    if(row.cells[indiceFinalizado]) row.cells[indiceFinalizado].style.display='none';
-                });
-            }
-
-            /* Retira somente a coluna DATA da visualização para liberar espaço
-               para EVENTO e para o botão EDITAR. Nenhuma regra de dados é alterada. */
-            if(indiceData>=0){
-                Array.from(table.rows).forEach(function(row){
-                    if(row.cells[indiceData]) row.cells[indiceData].style.display='none';
-                });
-            }
-
-            /* Remove somente a coluna AÇÃO antiga, deixando apenas o novo EDITAR
-               na coluna AÇÕES. */
-            if(indiceAcaoAntiga>=0){
-                Array.from(table.rows).forEach(function(row){
-                    if(row.cells[indiceAcaoAntiga]) row.cells[indiceAcaoAntiga].style.display='none';
-                });
-            }
-
-            const th=document.createElement('th');
-            th.textContent='AÇÕES';
-            th.style.whiteSpace='nowrap';
-            headRow.appendChild(th);
-
-            const rows=Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); });
-            rows.forEach(function(row){
-                const td=document.createElement('td');
-                td.style.whiteSpace='nowrap';
-
-                let id='';
-                const primeira=row.cells[0];
-                if(primeira){
-                    const m=texto(primeira).match(/\d+/);
-                    if(m) id=m[0];
-                }
-
-                if(id){
-                    const a=document.createElement('a');
-                    a.href='/vendas/'+encodeURIComponent(id)+'/editar';
-                    a.textContent='✎ EDITAR';
-                    a.className='action-btn';
-                    a.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:92px;height:38px;padding:0 14px;margin:0;box-sizing:border-box;';
-                    td.appendChild(a);
-                }
-                row.appendChild(td);
-            });
-
-            table.dataset.sgfeEdicaoAcoes='1';
-        }
 
         let box=table.parentElement;
         while(box && box!==document.body){
@@ -5256,6 +5116,7 @@ html, body{
         }
 
         organizarTabela();
+        ocultarColunaFinalizado();
         organizarBotoes();
     }
 
