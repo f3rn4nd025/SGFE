@@ -4049,23 +4049,24 @@ def nova_venda():
             # Lemos a tabela e normalizamos os IDs para evitar problemas
             # de parâmetro/tipo do ODBC Microsoft Access.
             cur.execute("""
-                SELECT IDAgendamento, IDCliente, IDEvento
-                FROM tblAgendamentos
-            """)
-            ag = None
-            for row in cur.fetchall():
-                try:
-                    if access_int(row[0]) == id_agendamento:
-                        ag = row
-                        break
-                except Exception:
-                    continue
+                SELECT A.IDAgendamento, A.IDCliente, A.IDEvento, C.Nome
+                FROM tblAgendamentos AS A
+                LEFT JOIN tblClientes AS C ON C.IDCliente = A.IDCliente
+                WHERE A.IDAgendamento=?
+            """, [id_agendamento])
+            ag = cur.fetchone()
 
             if not ag:
                 raise ValueError("Agendamento não encontrado.")
 
             id_cliente = access_int(ag[1])
             id_evento = access_int(ag[2])
+            nome_atleta_agendamento = str(ag[3] or "").strip()
+
+            print(
+                f"[SGFE-VENDA-FLUXO] agendamento={id_agendamento} "
+                f"cliente={id_cliente} atleta={nome_atleta_agendamento!r} evento={id_evento}"
+            )
 
             cur.execute("""
                 SELECT IDEvento, QtdProvas, Valor
