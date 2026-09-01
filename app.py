@@ -4265,24 +4265,19 @@ def web_vendas():
             return int.from_bytes(raw, byteorder="little", signed=False)
 
         if isinstance(v, str):
+            # IDs migrados como um único caractere: o code point é o ID.
+            # Ex.: '4'=52, '5'=53, '\\t'=9, '\\x1f'=31, 'ć'=263.
+            if len(v) == 1:
+                return ord(v)
+
             s = v.strip()
             if not s:
                 return 0
 
-            # Primeiro tenta o caso normal: string numérica comum
-            # (ex.: "3", "116"). Isso cobre os valores gravados pelo
-            # próprio app (como o ID de status escolhido na edição da
-            # venda), que NÃO usam a codificação binária do Access.
             try:
                 return int(s)
             except Exception:
                 pass
-
-            # Só cai na decodificação por code point quando a string não é
-            # um número válido: IDs antigos migrados do Access que vieram
-            # como um único caractere binário. Ex.: '\\t'=9, '\\x1f'=31, 'ć'=263.
-            if len(s) == 1:
-                return ord(s)
 
             # PostgreSQL pode entregar um BYTEA textual como "\\x08".
             if s.lower().startswith("\\x"):
@@ -4442,8 +4437,49 @@ def web_vendas():
 
             return "", cid
 
+        def _num_status(v):
+            """Normaliza IDStatusVenda especificamente.
+
+            Diferente de _num() (usada para cliente/evento/venda, onde um
+            caractere único pode ser um código binário migrado do Access),
+            aqui um caractere único que já é um dígito ("1", "2", "3"...)
+            deve ser lido pelo valor literal, porque é assim que a tela de
+            edição de venda grava o status escolhido no formulário. Só cai
+            na decodificação por code point quando não é um número válido.
+            """
+            if v is None:
+                return 0
+            if isinstance(v, memoryview):
+                v = v.tobytes()
+            if isinstance(v, (bytes, bytearray)):
+                raw = bytes(v).rstrip(b"\x00")
+                if not raw:
+                    return 0
+                try:
+                    txt = raw.decode("ascii").strip()
+                    if txt.isdigit():
+                        return int(txt)
+                except Exception:
+                    pass
+                return int.from_bytes(raw, byteorder="little", signed=False)
+            if isinstance(v, str):
+                s = v.strip()
+                if not s:
+                    return 0
+                try:
+                    return int(s)
+                except Exception:
+                    pass
+                if len(s) == 1:
+                    return ord(s)
+                return 0
+            try:
+                return int(v)
+            except Exception:
+                return 0
+
         cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
-        status_map = {_num(r[0]): _txt(r[1]) for r in cur.fetchall()}
+        status_map = {_num_status(r[0]): _txt(r[1]) for r in cur.fetchall()}
 
         # A venda é lida diretamente, sem JOIN por IDs e SEM WHERE IDEvento.
         # Esta é a mesma estratégia usada pela tela ENTREGAS, que já está
@@ -4472,7 +4508,7 @@ def web_vendas():
             venda_id = _num(r[0])
             cliente_id = _num(r[2])
             evento_id = _num(r[3])
-            status_id = _num(r[8])
+            status_id = _num_status(r[8])
 
             # FILTRO DE EVENTO: exatamente como na tela ENTREGAS.
             # Só compara depois que IDEvento foi normalizado em Python.
@@ -6561,19 +6597,15 @@ def web_entregas():
                         pass
                     return int.from_bytes(raw, byteorder='little', signed=False)
                 if isinstance(v, str):
+                    if len(v) == 1:
+                        return ord(v)
                     s = v.strip()
                     if not s:
                         return 0
-                    # Mesma correção da tela de Vendas: tenta número normal
-                    # primeiro e só decodifica como caractere binário do
-                    # Access se não for um número válido.
                     try:
                         return int(s)
                     except Exception:
-                        pass
-                    if len(s) == 1:
-                        return ord(s)
-                    return 0
+                        return 0
                 try:
                     return int(v)
                 except Exception:
