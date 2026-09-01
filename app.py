@@ -7153,19 +7153,28 @@ def web_pagamentos():
 
         if evento_id:
             eid = access_int(evento_id)
+            evento_map = {ev["id"]: ev for ev in eventos}
+
+            # IMPORTANTE: NÃO filtrar por V.IDEvento dentro do SQL e NÃO
+            # dar JOIN direto com tblEvento aqui. IDEvento é character
+            # varying no PostgreSQL (herança da migração do Access) e
+            # comparar/juntar com um número (access_int) já causou um
+            # "operator does not exist" (erro 500) nesta tela. A mesma
+            # armadilha já foi resolvida assim nas telas VENDAS e
+            # ENTREGAS: buscamos tudo e filtramos o evento em Python,
+            # com o nome/data do evento vindos da lista `eventos` já
+            # carregada acima.
             cur.execute("""
-                SELECT V.IDVenda, V.DataVenda, C.Nome AS Atleta,
-                       C.Telefone, C.Contato, E.NomeEvento, E.DataEvento,
+                SELECT V.IDVenda, V.DataVenda, V.IDEvento, C.Nome AS Atleta,
+                       C.Telefone, C.Contato,
                        V.QtdProvas, V.ValorFinal, V.Finalizado, V.StatusPagamento
-                FROM (((tblVendaPacotes AS V
+                FROM (tblVendaPacotes AS V
                 INNER JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
-                INNER JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
-                LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda)
-                WHERE V.IDEvento=?
-                  AND (S.StatusVenda Is Null OR UCASE(S.StatusVenda) NOT LIKE '%CANCEL%')
+                LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda
+                WHERE (S.StatusVenda Is Null OR UCASE(S.StatusVenda) NOT LIKE '%CANCEL%')
                 ORDER BY C.Nome, V.IDVenda
-            """, [eid])
-            vendas = cur.fetchall()
+            """)
+            vendas = [r for r in cur.fetchall() if access_int(r[2]) == eid]
 
             # Soma o que já foi recebido por venda. A estrutura aceita mais de
             # um registro histórico de pagamento, mesmo que o fluxo atual
@@ -7185,7 +7194,7 @@ def web_pagamentos():
             termo = search.lower()
             for r in vendas:
                 id_venda = access_int(r[0])
-                valor = float(r[8] or 0)
+                valor = float(r[7] or 0)
                 status_registrado = str(r[9] or "aberto").strip().lower()
                 recebido = float(pagamentos.get(id_venda, 0) or 0)
                 if status_registrado == "cortesia":
@@ -7206,14 +7215,16 @@ def web_pagamentos():
                     situacao = "aberto"
                     situacao_label = "EM ABERTO"
 
+                ev_info = evento_map.get(access_int(r[2]), {})
+
                 item = {
                     "id": id_venda,
-                    "atleta": str(r[2] or ""),
-                    "telefone": str(r[3] or ""),
-                    "contato": str(r[4] or ""),
-                    "evento": str(r[5] or ""),
-                    "data_evento": r[6].strftime("%d/%m/%Y") if hasattr(r[6], "strftime") else str(r[6] or ""),
-                    "provas": access_int(r[7]),
+                    "atleta": str(r[3] or ""),
+                    "telefone": str(r[4] or ""),
+                    "contato": str(r[5] or ""),
+                    "evento": ev_info.get("nome", ""),
+                    "data_evento": ev_info.get("data", ""),
+                    "provas": access_int(r[6]),
                     "valor": valor,
                     "recebido": recebido,
                     "aberto": aberto,
