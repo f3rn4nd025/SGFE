@@ -4889,6 +4889,15 @@ html, body{
 .module-top .action-btn{
     flex:0 0 auto !important;
     white-space:nowrap !important;
+    width:180px !important;
+    height:44px !important;
+    min-width:180px !important;
+    padding:0 18px !important;
+    margin:0 !important;
+    display:inline-flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    box-sizing:border-box !important;
 }
 </style>
 
