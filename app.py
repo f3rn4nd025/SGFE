@@ -31,37 +31,66 @@ try:
 except Exception:
     fitz = None
 
-def access_int(v):
-    """Converte IDs corretamente, inclusive bytes/memoryview."""
-    if v is None:
+def access_int(value):
+    """Converte IDs do Access/ODBC de forma robusta."""
+    if value is None:
         return 0
-    if isinstance(v, memoryview):
-        v = v.tobytes()
-    if isinstance(v, (bytes, bytearray)):
-        b = bytes(v)
+
+    # Alguns campos AutoNumber/Number do Access podem chegar pelo ODBC
+    # como bytes ou como string contendo bytes binários.
+    if isinstance(value, (bytes, bytearray)):
+        raw = bytes(value).rstrip(b'\x00')
+        if not raw:
+            return 0
+        # Se forem bytes ASCII normais (ex.: b'258')
         try:
-            s = b.decode("utf-8").strip()
-            if s and (s.isdigit() or (s.startswith("-") and s[1:].isdigit())):
-                return int(s)
+            txt = raw.decode('ascii').strip()
+            if txt.isdigit():
+                return int(txt)
         except Exception:
             pass
-        if b:
-            # Para IDs BYTEA/binários, considera as duas ordens.
-            vals = [
-                int.from_bytes(b, "little", signed=False),
-                int.from_bytes(b, "big", signed=False),
-            ]
-            vals = [x for x in vals if x > 0]
-            if vals:
-                return min(vals)
-        return 0
-    try:
-        return int(v)
-    except Exception:
-        try:
-            return int(float(str(v).strip()))
-        except Exception:
+        # Inteiro binário little-endian do Access.
+        return int.from_bytes(raw, byteorder='little', signed=False)
+
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
             return 0
+        # String numérica normal.
+        try:
+            return int(s)
+        except ValueError:
+            pass
+
+        # Alguns IDs do Access migrados para PostgreSQL chegam como um
+        # único caractere Unicode cujo code point é o ID + 256.
+        # Recupera o ID sem alterar nenhuma regra de negócio.
+        if len(s) == 1 and ord(s) >= 256:
+            return ord(s) - 256
+
+        # String que contém bytes binários (ex.: '\x01\x00\x00\x00').
+        try:
+            raw = value.encode('latin1').rstrip(b'\x00')
+            if not raw:
+                return 0
+            return int.from_bytes(raw, byteorder='little', signed=False)
+        except Exception:
+            raise ValueError(f"ID do Access inválido: {value!r}")
+
+    return int(value)
+
+app = Flask(__name__)
+app.secret_key = os.environ.get("SGFE_SECRET_KEY", "SGFE-FG-FOTOS-LOCAL-2026")
+app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 24 * 30
+
+# =========================================================
+# ACESSO SGFE
+# =========================================================
+# Administrador inicial do sistema.
+# Pode ser alterado por variáveis de ambiente quando publicado.
+ADMIN_LOGIN = os.environ.get("SGFE_ADMIN_LOGIN", "admin")
+ADMIN_PASSWORD = os.environ.get("SGFE_ADMIN_PASSWORD", "SGFE@2026")
+
 
 def _senha_confere(senha, senha_hash_ou_senha):
     # Fotógrafos usam hash Werkzeug; o administrador inicial usa a
