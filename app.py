@@ -4452,7 +4452,7 @@ def web_vendas():
                     Finalizado,
                     DataFinalizacao
                 FROM tblVendaPacotes
-                WHERE IDEvento = ?
+                WHERE IDEvento = CAST(? AS INTEGER)
                 ORDER BY IDVenda DESC
             """, [evento_selecionado])
         else:
