@@ -166,6 +166,27 @@ def aplicar_modal_sgfe(response):
                     if pos_marca >= 0:
                         html = html[:pos_marca] + estilo_marca + html[pos_marca:]
 
+        # ENTREGAS: normaliza somente o peso das letras das linhas da tabela.
+        # Nenhuma regra funcional, filtro ou consulta é alterada.
+        if request.path == "/entregas":
+            estilo_entregas = """
+<style id="sgfe-entregas-fonte-normal">
+  table tbody td,
+  table tbody td span,
+  table tbody td div,
+  table tbody td p {
+    font-weight:400 !important;
+  }
+</style>
+"""
+            pos_head = html.lower().find('</head>')
+            if pos_head >= 0:
+                html = html[:pos_head] + estilo_entregas + html[pos_head:]
+            else:
+                pos_body = html.lower().find('</body>')
+                if pos_body >= 0:
+                    html = html[:pos_body] + estilo_entregas + html[pos_body:]
+
         # SAIR fica no menu lateral, em todas as telas autenticadas.
         # Não altera o restante do menu nem cria outro botão no cabeçalho.
         if session.get("admin_autenticado") or session.get("fotografo_id"):
