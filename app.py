@@ -62,11 +62,11 @@ def access_int(value):
         except ValueError:
             pass
 
-        # Alguns IDs do Access migrados para PostgreSQL chegam como um
-        # único caractere Unicode cujo code point é o ID + 256.
-        # Recupera o ID sem alterar nenhuma regra de negócio.
-        if len(s) == 1 and ord(s) >= 256:
-            return ord(s) - 256
+        # Alguns IDs migrados chegam como um único caractere cujo
+        # code point é exatamente o valor numérico do ID.
+        # Exemplos observados: 'V' -> 86, '4' -> 52, 'ć' -> 263.
+        if len(s) == 1:
+            return ord(s)
 
         # String que contém bytes binários (ex.: '\x01\x00\x00\x00').
         try:
