@@ -4906,23 +4906,6 @@ html, body{
 }
 </style>
 
-<style id="ajuste-apenas-botao-nova-venda">
-/* AJUSTE EXCLUSIVO DO BOTAO NOVA VENDA */
-a[href*="/vendas/nova"]{
-    width:190px !important;
-    height:48px !important;
-    min-width:190px !important;
-    max-width:190px !important;
-    padding:0 !important;
-    margin-right:24px !important;
-    box-sizing:border-box !important;
-    display:inline-flex !important;
-    align-items:center !important;
-    justify-content:center !important;
-    white-space:nowrap !important;
-}
-</style>
-
 <script>
 (function(){
     'use strict';
