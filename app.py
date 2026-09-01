@@ -4906,6 +4906,36 @@ html, body{
     justify-content:center !important;
     box-sizing:border-box !important;
 }
+/* AJUSTE PONTUAL: ENQUADRAMENTO DA TABELA DE VENDAS/PACOTES
+   Somente faz a tabela caber na largura disponível.
+   Não altera filtro, dados, rotas ou regras de negócio. */
+.sgfe-vendas-tabela-expandida table{
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    table-layout:fixed !important;
+    box-sizing:border-box !important;
+}
+
+.sgfe-vendas-tabela-expandida table th,
+.sgfe-vendas-tabela-expandida table td{
+    min-width:0 !important;
+    max-width:none !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+}
+
+.sgfe-vendas-tabela-expandida table th:last-child,
+.sgfe-vendas-tabela-expandida table td:last-child{
+    width:110px !important;
+}
+
+.sgfe-vendas-tabela-expandida table td:last-child .action-btn{
+    min-width:92px !important;
+    width:92px !important;
+    padding:0 8px !important;
+}
+
 </style>
 
 <script>
