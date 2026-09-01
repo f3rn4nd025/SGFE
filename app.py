@@ -4963,6 +4963,55 @@ html, body{
         const table=document.querySelector('table');
         if(!table) return;
 
+        /* VENDAS/PACOTES: remove somente a coluna DATA FINALIZAÇÃO
+           e acrescenta o botão EDITAR. A rota /vendas/<id>/editar já existe
+           no backend. Nenhuma regra do filtro ou dos dados é alterada. */
+        const headRow=table.tHead ? table.tHead.rows[0] : table.querySelector('thead tr');
+        if(headRow && !table.dataset.sgfeEdicaoAcoes){
+            const headers=Array.from(headRow.cells);
+            let indiceData=-1;
+            headers.forEach(function(cell, i){
+                const t=texto(cell).toUpperCase();
+                if(t==='DATA FINALIZAÇÃO' || t==='DATA FINALIZACAO') indiceData=i;
+            });
+
+            if(indiceData>=0){
+                Array.from(table.rows).forEach(function(row){
+                    if(row.cells[indiceData]) row.cells[indiceData].style.display='none';
+                });
+            }
+
+            const th=document.createElement('th');
+            th.textContent='AÇÕES';
+            th.style.whiteSpace='nowrap';
+            headRow.appendChild(th);
+
+            const rows=Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); });
+            rows.forEach(function(row){
+                const td=document.createElement('td');
+                td.style.whiteSpace='nowrap';
+
+                let id='';
+                const primeira=row.cells[0];
+                if(primeira){
+                    const m=texto(primeira).match(/\d+/);
+                    if(m) id=m[0];
+                }
+
+                if(id){
+                    const a=document.createElement('a');
+                    a.href='/vendas/'+encodeURIComponent(id)+'/editar';
+                    a.textContent='✎ EDITAR';
+                    a.className='action-btn';
+                    a.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:92px;height:38px;padding:0 14px;margin:0;box-sizing:border-box;';
+                    td.appendChild(a);
+                }
+                row.appendChild(td);
+            });
+
+            table.dataset.sgfeEdicaoAcoes='1';
+        }
+
         let box=table.parentElement;
         while(box && box!==document.body){
             const cs=getComputedStyle(box);
