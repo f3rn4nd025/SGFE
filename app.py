@@ -2120,7 +2120,7 @@ def api_evento_geral():
             cur.execute("""
                 SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
                 FROM tblEvento
-                WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)
+                WHERE IDEvento=?
             """, [str(evento_id)])
 
             r = cur.fetchone()
@@ -2140,7 +2140,7 @@ def api_evento_geral():
                 # -------------------------------------------------
                 resumo["agendamentos"] = int(scalar(
                     cur,
-                    "SELECT Count(*) FROM tblAgendamentos WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)",
+                    "SELECT Count(*) FROM tblAgendamentos WHERE IDEvento=?",
                     0,
                     [str(evento_id)]
                 ) or 0)
@@ -2152,7 +2152,7 @@ def api_evento_geral():
                     SELECT V.IDVenda, V.ValorFinal, V.Finalizado,
                            V.StatusPagamento
                     FROM tblVendaPacotes AS V
-                    WHERE CAST(V.IDEvento AS TEXT)=CAST(? AS TEXT)
+                    WHERE V.IDEvento=?
                 """, [str(evento_id)])
 
                 vendas_evento = cur.fetchall()
@@ -4191,7 +4191,7 @@ def api_precos(evento_id):
         cur=conn.cursor()
         cur.execute("""
         SELECT QtdProvas,Valor FROM tblPrecoEvento
-        WHERE CAST(IdEvento AS TEXT)=CAST(? AS TEXT) ORDER BY QtdProvas
+        WHERE IdEvento=? ORDER BY QtdProvas
         """,[evento_id])
         return jsonify([{"qtd":r[0],"valor":float(r[1] or 0)} for r in cur.fetchall()])
     finally:
@@ -4310,10 +4310,7 @@ def web_vendas():
         """)
         evento_map = {}
         for r in cur.fetchall():
-            # IMPORTANTE: o filtro antigo que funcionava usava access_int().
-            # Mantemos isso aqui para o ID escolhido no combo ser o mesmo ID
-            # usado em tblVendaPacotes.
-            eid = access_int(r[0])
+            eid = _num(r[0])
             evento_map[eid] = {
                 "id": eid,
                 "nome": _txt(r[1]),
@@ -4325,8 +4322,7 @@ def web_vendas():
 
         if evento_param:
             try:
-                # Mesma conversão da versão em que o filtro funcionava.
-                candidato = access_int(evento_param)
+                candidato = _num(evento_param)
             except Exception:
                 candidato = 0
             if candidato in evento_map:
@@ -4434,11 +4430,9 @@ def web_vendas():
         cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
         status_map = {_num(r[0]): _txt(r[1]) for r in cur.fetchall()}
 
-        # A venda é lida diretamente, sem JOIN por IDs e SEM WHERE IDEvento.
-        # Esta é a mesma estratégia usada pela tela ENTREGAS, que já está
-        # funcionando corretamente. No PostgreSQL, IDEvento é character varying
-        # e alguns registros antigos podem ter representações diferentes.
-        # Por isso o filtro é feito em Python, depois de normalizar o ID.
+        # A venda é lida diretamente, sem JOIN por IDs. A mesma estratégia
+        # usada na tela de ATLETAS é aplicada aqui: ler por posição e depois
+        # montar aliases para o template.
         cur.execute("""
             SELECT
                 IDVenda,
@@ -4463,8 +4457,7 @@ def web_vendas():
             evento_id = _num(r[3])
             status_id = _num(r[8])
 
-            # FILTRO DE EVENTO: exatamente como na tela ENTREGAS.
-            # Só compara depois que IDEvento foi normalizado em Python.
+            # Mantém o filtro por evento exatamente como no sistema local.
             if evento_selecionado and evento_id != evento_selecionado:
                 continue
 
