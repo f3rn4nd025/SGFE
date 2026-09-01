@@ -4993,6 +4993,31 @@ html, body{
         const evento=document.querySelector('select[name="evento"]');
         if(!evento) return;
 
+        /* FILTRO DE EVENTO: a troca do evento precisa efetivamente
+           recarregar /vendas com ?evento=ID.
+           Mantemos a pesquisa q, quando existir.
+           Não altera os nomes dos atletas nem qualquer dado da venda. */
+        if(!evento.dataset.sgfeFiltroEventoAtivo){
+            evento.dataset.sgfeFiltroEventoAtivo='1';
+            evento.addEventListener('change',function(){
+                const valor=(evento.value || '').trim();
+                const url=new URL(window.location.href);
+                url.pathname='/vendas';
+                if(valor){
+                    url.searchParams.set('evento',valor);
+                }else{
+                    url.searchParams.delete('evento');
+                }
+                const q=url.searchParams.get('q');
+                if(q){
+                    url.searchParams.set('q',q);
+                }else{
+                    url.searchParams.delete('q');
+                }
+                window.location.href=url.toString();
+            });
+        }
+
         removerContadorVendas();
 
         /* Mantém a legenda como linha abaixo dos controles. */
