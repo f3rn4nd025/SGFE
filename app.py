@@ -32,65 +32,39 @@ except Exception:
     fitz = None
 
 def access_int(value):
-    """Converte IDs do Access/ODBC de forma robusta."""
+    """Converte IDs retornados pelo PostgreSQL/ODBC sem alterar as regras do SGFE."""
     if value is None:
         return 0
-
-    # Alguns campos AutoNumber/Number do Access podem chegar pelo ODBC
-    # como bytes ou como string contendo bytes binários.
+    if isinstance(value, memoryview):
+        value = value.tobytes()
     if isinstance(value, (bytes, bytearray)):
-        raw = bytes(value).rstrip(b'\x00')
+        raw = bytes(value)
         if not raw:
             return 0
-        # Se forem bytes ASCII normais (ex.: b'258')
         try:
-            txt = raw.decode('ascii').strip()
-            if txt.isdigit():
-                return int(txt)
+            s = raw.decode("ascii").strip()
+            if s and (s.isdigit() or (s.startswith("-") and s[1:].isdigit())):
+                return int(s)
         except Exception:
             pass
-        # Inteiro binário little-endian do Access.
-        return int.from_bytes(raw, byteorder='little', signed=False)
-
+        return int.from_bytes(raw, byteorder="little", signed=False)
     if isinstance(value, str):
         s = value.strip()
         if not s:
             return 0
-        # String numérica normal.
         try:
             return int(s)
         except ValueError:
-            pass
-
-        # Alguns IDs do Access migrados para PostgreSQL chegam como um
-        # único caractere Unicode cujo code point é o ID + 256.
-        # Recupera o ID sem alterar nenhuma regra de negócio.
-        if len(s) == 1 and ord(s) >= 256:
-            return ord(s) - 256
-
-        # String que contém bytes binários (ex.: '\x01\x00\x00\x00').
+            if len(s) == 1:
+                return ord(s)
+            return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
         try:
-            raw = value.encode('latin1').rstrip(b'\x00')
-            if not raw:
-                return 0
-            return int.from_bytes(raw, byteorder='little', signed=False)
+            return int(float(str(value).strip()))
         except Exception:
-            raise ValueError(f"ID do Access inválido: {value!r}")
-
-    return int(value)
-
-app = Flask(__name__)
-app.secret_key = os.environ.get("SGFE_SECRET_KEY", "SGFE-FG-FOTOS-LOCAL-2026")
-app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 24 * 30
-
-# =========================================================
-# ACESSO SGFE
-# =========================================================
-# Administrador inicial do sistema.
-# Pode ser alterado por variáveis de ambiente quando publicado.
-ADMIN_LOGIN = os.environ.get("SGFE_ADMIN_LOGIN", "admin")
-ADMIN_PASSWORD = os.environ.get("SGFE_ADMIN_PASSWORD", "SGFE@2026")
-
+            return 0
 
 def _senha_confere(senha, senha_hash_ou_senha):
     # Fotógrafos usam hash Werkzeug; o administrador inicial usa a
@@ -4259,11 +4233,6 @@ def web_vendas():
             return int.from_bytes(raw, byteorder="little", signed=False)
 
         if isinstance(v, str):
-            # IDs migrados como um único caractere: o code point é o ID.
-            # Ex.: '4'=52, '5'=53, '\\t'=9, '\\x1f'=31, 'ć'=263.
-            if len(v) == 1:
-                return ord(v)
-
             s = v.strip()
             if not s:
                 return 0
@@ -4992,46 +4961,6 @@ html, body{
         const frase='Escolha o evento para visualizar somente as vendas/pacotes dele.';
         const evento=document.querySelector('select[name="evento"]');
         if(!evento) return;
-
-        /* FILTRO DE EVENTO: a troca do evento precisa efetivamente
-           recarregar /vendas com ?evento=ID.
-           Mantemos a pesquisa q, quando existir.
-           Não altera os nomes dos atletas nem qualquer dado da venda. */
-        /* FILTRO DE EVENTO - versão robusta.
-           O listener é delegado no document para continuar funcionando mesmo
-           se algum script reconstruir o <select> depois do carregamento.
-           A mudança também é colocada em onchange como segunda camada. */
-        function aplicarFiltroEvento(el){
-            if(!el) return;
-            const valor=String(el.value || '').trim();
-            const url=new URL(window.location.href);
-            url.pathname='/vendas';
-            if(valor && valor !== '0'){
-                url.searchParams.set('evento',valor);
-            }else{
-                url.searchParams.delete('evento');
-            }
-            const q=url.searchParams.get('q');
-            if(q) url.searchParams.set('q',q);
-            else url.searchParams.delete('q');
-            window.location.assign(url.toString());
-        }
-
-        if(!window.__sgfeFiltroEventoDelegado){
-            window.__sgfeFiltroEventoDelegado=true;
-            document.addEventListener('change',function(e){
-                const alvo=e.target;
-                if(alvo && alvo.matches && alvo.matches('select[name="evento"]')){
-                    e.stopPropagation();
-                    aplicarFiltroEvento(alvo);
-                }
-            },true);
-        }
-
-        if(!evento.dataset.sgfeFiltroEventoAtivo){
-            evento.dataset.sgfeFiltroEventoAtivo='1';
-            evento.onchange=function(){ aplicarFiltroEvento(this); };
-        }
 
         removerContadorVendas();
 
@@ -6377,37 +6306,6 @@ def web_entregas():
             # =============================================================
 
             # Mapa de clientes usando as mesmas regras da tela Vendas.
-            def _num_ent(v):
-                if v is None:
-                    return 0
-                if isinstance(v, memoryview):
-                    v = v.tobytes()
-                if isinstance(v, (bytes, bytearray)):
-                    raw = bytes(v).rstrip(b'\\x00')
-                    if not raw:
-                        return 0
-                    try:
-                        txt = raw.decode('ascii').strip()
-                        if txt and txt.isdigit():
-                            return int(txt)
-                    except Exception:
-                        pass
-                    return int.from_bytes(raw, byteorder='little', signed=False)
-                if isinstance(v, str):
-                    if len(v) == 1:
-                        return ord(v)
-                    s = v.strip()
-                    if not s:
-                        return 0
-                    try:
-                        return int(s)
-                    except Exception:
-                        return 0
-                try:
-                    return int(v)
-                except Exception:
-                    return 0
-
             def _id_chaves_ent(v):
                 chaves = []
                 if v is None:
@@ -6418,7 +6316,7 @@ def web_entregas():
                         chaves.append(("raw", bruto))
                 except Exception:
                     pass
-                n = _num_ent(v)
+                n = access_int(v)
                 if n:
                     chaves.append(("num", n))
                 return chaves
@@ -6439,7 +6337,7 @@ def web_entregas():
             def _resolver_cliente_ent(valor_id):
                 # Resolve diretamente em tblClientes. A Entregas usa a mesma
                 # origem da Venda e não cria/edita nenhum vínculo.
-                cid = _num_ent(valor_id)
+                cid = access_int(valor_id)
                 if cid:
                     try:
                         cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=? LIMIT 1", [cid])
@@ -6474,9 +6372,9 @@ def web_entregas():
             ag_agendamento_raw = {}
             for r in cur.fetchall():
                 idv_raw, aid_raw, cid_raw = r[0], r[1], r[2]
-                idv = _num_ent(idv_raw)
-                aid = _num_ent(aid_raw)
-                cid = _num_ent(cid_raw)
+                idv = access_int(idv_raw)
+                aid = access_int(aid_raw)
+                cid = access_int(cid_raw)
                 if idv:
                     ag_venda_cliente[idv] = cid
                 try:
@@ -6548,7 +6446,7 @@ def web_entregas():
                             atleta, cliente_id = _resolver_cliente_ent(cid_raw)
 
                 # Fallback: VENDA -> IDAgendamento -> CLIENTE.
-                id_agendamento = _num_ent(id_agendamento_raw)
+                id_agendamento = access_int(id_agendamento_raw)
                 if not atleta and id_agendamento:
                     cid_ag = ag_agendamento_cliente.get(id_agendamento, 0)
                     if cid_ag:
