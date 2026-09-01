@@ -32,55 +32,52 @@ except Exception:
     fitz = None
 
 def access_int(value):
-    """Converte IDs do Access/ODBC/PostgreSQL sem alterar as regras do sistema."""
+    """Converte IDs do Access/ODBC de forma robusta."""
     if value is None:
         return 0
 
-    if isinstance(value, memoryview):
-        value = value.tobytes()
-
+    # Alguns campos AutoNumber/Number do Access podem chegar pelo ODBC
+    # como bytes ou como string contendo bytes binários.
     if isinstance(value, (bytes, bytearray)):
-        raw = bytes(value).rstrip(b"\\x00")
+        raw = bytes(value).rstrip(b'\x00')
         if not raw:
             return 0
+        # Se forem bytes ASCII normais (ex.: b'258')
         try:
-            txt = raw.decode("ascii").strip()
-            if txt and (txt.isdigit() or (txt.startswith("-") and txt[1:].isdigit())):
+            txt = raw.decode('ascii').strip()
+            if txt.isdigit():
                 return int(txt)
         except Exception:
             pass
-        return int.from_bytes(raw, byteorder="little", signed=False)
+        # Inteiro binário little-endian do Access.
+        return int.from_bytes(raw, byteorder='little', signed=False)
 
     if isinstance(value, str):
         s = value.strip()
         if not s:
             return 0
+        # String numérica normal.
         try:
             return int(s)
         except ValueError:
             pass
 
-        # IDs antigos estão chegando como um único caractere Unicode.
-        # O code point é o ID original, conforme os valores observados no log:
-        # 'V'=86, '4'=52, 'ć'=263, 'þ'=254, '\x1f'=31.
-        if len(s) == 1:
-            return ord(s)
+        # Alguns IDs do Access migrados para PostgreSQL chegam como um
+        # único caractere Unicode cujo code point é o ID + 256.
+        # Recupera o ID sem alterar nenhuma regra de negócio.
+        if len(s) == 1 and ord(s) >= 256:
+            return ord(s) - 256
 
+        # String que contém bytes binários (ex.: '\x01\x00\x00\x00').
         try:
-            raw = s.encode("latin1").rstrip(b"\\x00")
-            if raw:
-                return int.from_bytes(raw, byteorder="little", signed=False)
+            raw = value.encode('latin1').rstrip(b'\x00')
+            if not raw:
+                return 0
+            return int.from_bytes(raw, byteorder='little', signed=False)
         except Exception:
-            pass
-        return 0
+            raise ValueError(f"ID do Access inválido: {value!r}")
 
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        try:
-            return int(float(str(value).strip()))
-        except Exception:
-            return 0
+    return int(value)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SGFE_SECRET_KEY", "SGFE-FG-FOTOS-LOCAL-2026")
@@ -4262,6 +4259,11 @@ def web_vendas():
             return int.from_bytes(raw, byteorder="little", signed=False)
 
         if isinstance(v, str):
+            # IDs migrados como um único caractere: o code point é o ID.
+            # Ex.: '4'=52, '5'=53, '\\t'=9, '\\x1f'=31, 'ć'=263.
+            if len(v) == 1:
+                return ord(v)
+
             s = v.strip()
             if not s:
                 return 0
@@ -4365,17 +4367,27 @@ def web_vendas():
                 else:
                     cliente_raw_map[chave] = nome
 
-        # Algumas vendas antigas podem ter o IDCliente inconsistente após a
-        # migração, mas ainda possuem o IDAgendamento correto. Como a venda
-        # nasce do agendamento, usamos esse vínculo como segunda fonte para
-        # localizar o atleta. Também preservamos o IDCliente bruto.
-        cur.execute("SELECT IDAgendamento, IDCliente FROM tblAgendamentos")
+        # A venda nasce de um agendamento. O vínculo mais direto e seguro para
+        # recuperar o atleta de uma venda antiga é tblAgendamentos.IDVendas ->
+        # tblVendaPacotes.IDVenda. Só depois usamos IDAgendamento e IDCliente
+        # como compatibilidade para registros antigos. Nada é gravado/alterado.
+        cur.execute("SELECT IDVendas, IDAgendamento, IDCliente FROM tblAgendamentos")
+        agendamento_venda_cliente_map = {}
+        agendamento_venda_raw_map = {}
         agendamento_cliente_map = {}
         agendamento_cliente_raw_map = {}
         for r in cur.fetchall():
-            aid_raw, cid_raw = r[0], r[1]
+            idv_raw, aid_raw, cid_raw = r[0], r[1], r[2]
+            idv = _num(idv_raw)
             aid = _num(aid_raw)
             cid = _num(cid_raw)
+
+            if idv:
+                agendamento_venda_cliente_map[idv] = cid
+            for tipo, chave in _id_chaves(idv_raw):
+                if tipo == "raw":
+                    agendamento_venda_raw_map[chave] = cid_raw
+
             if aid:
                 agendamento_cliente_map[aid] = cid
             for tipo, chave in _id_chaves(aid_raw):
@@ -4383,19 +4395,35 @@ def web_vendas():
                     agendamento_cliente_raw_map[chave] = cid_raw
 
         def _resolver_cliente(valor_id):
-            # 1) representação numérica normalizada
+            # Resolve o cliente pelo ID real da venda/agendamento.
+            # A consulta direta é a fonte de verdade para a exibição do nome,
+            # evitando depender de mapas que podem conter representações
+            # diferentes dos IDs antigos migrados.
             cid = _num(valor_id)
+            if cid:
+                try:
+                    cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=? LIMIT 1", [cid])
+                    row_cliente = cur.fetchone()
+                    if row_cliente and row_cliente[0]:
+                        nome = str(row_cliente[0]).strip()
+                        if nome:
+                            return nome, cid
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+
+            # Compatibilidade com representações antigas/textuais.
             if cid and cid in cliente_map:
                 return cliente_map[cid], cid
 
-            # 2) representação textual original
             try:
                 bruto = str(valor_id).strip()
             except Exception:
                 bruto = ""
             if bruto and bruto in cliente_raw_map:
-                nome = cliente_raw_map[bruto]
-                return nome, cid
+                return cliente_raw_map[bruto], cid
 
             return "", cid
 
@@ -4435,9 +4463,30 @@ def web_vendas():
 
             atleta, cliente_id = _resolver_cliente(r[2])
 
-            # Fallback seguro: se o IDCliente da venda não localizar o nome,
-            # tenta o IDAgendamento da própria venda. Não altera banco nem
-            # outras telas, apenas recupera o nome correto para a listagem.
+            # FONTE PRINCIPAL PARA A LISTAGEM DE VENDAS:
+            # a venda foi criada a partir de um agendamento e o agendamento
+            # guarda o ID da venda em IDVendas. Portanto, quando o IDCliente
+            # gravado na venda antiga não consegue localizar o nome, cruzamos
+            # primeiro VENDA -> AGENDAMENTO -> CLIENTE. Isso resolve somente a
+            # exibição do nome e não altera nenhuma regra nem nenhum registro.
+            if not atleta and venda_id:
+                cliente_id_ag_venda = agendamento_venda_cliente_map.get(venda_id, 0)
+                if cliente_id_ag_venda:
+                    atleta = cliente_map.get(cliente_id_ag_venda, "")
+                    if atleta:
+                        cliente_id = cliente_id_ag_venda
+
+            # Mesmo vínculo acima, preservando a representação textual original
+            # caso IDVendas tenha sido migrado como texto/bytea.
+            if not atleta and venda_id:
+                venda_id_txt = str(r[0]).strip() if r[0] is not None else ""
+                if venda_id_txt:
+                    cid_raw_venda = agendamento_venda_raw_map.get(venda_id_txt)
+                    if cid_raw_venda is not None:
+                        atleta, cliente_id = _resolver_cliente(cid_raw_venda)
+
+            # Fallback de compatibilidade: se ainda não encontrou pelo vínculo
+            # da própria venda, tenta o IDAgendamento registrado na venda.
             id_agendamento_raw = r[9]
             id_agendamento = _num(id_agendamento_raw)
             if not atleta and id_agendamento:
@@ -4458,6 +4507,73 @@ def web_vendas():
                     cid_raw_ag = agendamento_cliente_raw_map.get(aid_raw_txt)
                     if cid_raw_ag is not None:
                         atleta, cliente_id = _resolver_cliente(cid_raw_ag)
+
+            # ÚLTIMA RECUPERAÇÃO PARA OS REGISTROS MIGRADOS:
+            # quando o PostgreSQL recebeu os IDs antigos do Access em formatos
+            # diferentes, a conversão em Python pode não reproduzir exatamente
+            # o valor textual armazenado. Nesse caso cruzamos diretamente no
+            # PostgreSQL o ID da venda com tblAgendamentos.IDVendas e, depois,
+            # o ID do cliente com tblClientes.IDCliente.
+            #
+            # Esta etapa é SOMENTE leitura para montar a coluna ATLETA.
+            if not atleta and venda_id and _is_postgres():
+                try:
+                    cur.execute("""
+                        SELECT A.IDCliente
+                        FROM tblAgendamentos AS A
+                        WHERE CAST(A.IDVendas AS TEXT)=CAST(? AS TEXT)
+                        ORDER BY A.IDAgendamento DESC
+                        LIMIT 1
+                    """, [venda_id])
+                    ag_row = cur.fetchone()
+
+                    if ag_row:
+                        cid_raw = ag_row[0]
+                        atleta, cliente_id = _resolver_cliente(cid_raw)
+
+                        if not atleta:
+                            cur.execute("""
+                                SELECT Nome
+                                FROM tblClientes
+                                WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
+                                LIMIT 1
+                            """, [cid_raw])
+                            cliente_row = cur.fetchone()
+                            if cliente_row and cliente_row[0]:
+                                atleta = str(cliente_row[0]).strip()
+                except Exception:
+                    pass
+
+            # Se o vínculo IDVendas não existir em registros antigos, tenta
+            # diretamente o IDAgendamento gravado na venda, também sem depender
+            # da conversão Python do ID.
+            if not atleta and id_agendamento_raw is not None and _is_postgres():
+                try:
+                    cur.execute("""
+                        SELECT A.IDCliente
+                        FROM tblAgendamentos AS A
+                        WHERE CAST(A.IDAgendamento AS TEXT)=CAST(? AS TEXT)
+                        ORDER BY A.IDAgendamento DESC
+                        LIMIT 1
+                    """, [id_agendamento_raw])
+                    ag_row = cur.fetchone()
+
+                    if ag_row:
+                        cid_raw = ag_row[0]
+                        atleta, cliente_id = _resolver_cliente(cid_raw)
+
+                        if not atleta:
+                            cur.execute("""
+                                SELECT Nome
+                                FROM tblClientes
+                                WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
+                                LIMIT 1
+                            """, [cid_raw])
+                            cliente_row = cur.fetchone()
+                            if cliente_row and cliente_row[0]:
+                                atleta = str(cliente_row[0]).strip()
+                except Exception:
+                    pass
 
             if not atleta:
                 print(f"[SGFE-VENDAS] atleta_nao_localizado venda={venda_id} IDCliente={r[2]!r} IDAgendamento={r[9]!r}")
@@ -4876,6 +4992,46 @@ html, body{
         const frase='Escolha o evento para visualizar somente as vendas/pacotes dele.';
         const evento=document.querySelector('select[name="evento"]');
         if(!evento) return;
+
+        /* FILTRO DE EVENTO: a troca do evento precisa efetivamente
+           recarregar /vendas com ?evento=ID.
+           Mantemos a pesquisa q, quando existir.
+           Não altera os nomes dos atletas nem qualquer dado da venda. */
+        /* FILTRO DE EVENTO - versão robusta.
+           O listener é delegado no document para continuar funcionando mesmo
+           se algum script reconstruir o <select> depois do carregamento.
+           A mudança também é colocada em onchange como segunda camada. */
+        function aplicarFiltroEvento(el){
+            if(!el) return;
+            const valor=String(el.value || '').trim();
+            const url=new URL(window.location.href);
+            url.pathname='/vendas';
+            if(valor && valor !== '0'){
+                url.searchParams.set('evento',valor);
+            }else{
+                url.searchParams.delete('evento');
+            }
+            const q=url.searchParams.get('q');
+            if(q) url.searchParams.set('q',q);
+            else url.searchParams.delete('q');
+            window.location.assign(url.toString());
+        }
+
+        if(!window.__sgfeFiltroEventoDelegado){
+            window.__sgfeFiltroEventoDelegado=true;
+            document.addEventListener('change',function(e){
+                const alvo=e.target;
+                if(alvo && alvo.matches && alvo.matches('select[name="evento"]')){
+                    e.stopPropagation();
+                    aplicarFiltroEvento(alvo);
+                }
+            },true);
+        }
+
+        if(!evento.dataset.sgfeFiltroEventoAtivo){
+            evento.dataset.sgfeFiltroEventoAtivo='1';
+            evento.onchange=function(){ aplicarFiltroEvento(this); };
+        }
 
         removerContadorVendas();
 
@@ -6156,95 +6312,375 @@ def excluir_evento(evento_id):
 
 @app.route("/entregas")
 def web_entregas():
-    evento_id = request.args.get("evento", "").strip()
+    evento_param = request.args.get("evento", "").strip()
     search = request.args.get("q", "").strip()
     mensagem = request.args.get("ok", "")
     erro = request.args.get("erro", "")
     conn = get_connection()
+
     try:
         cur = conn.cursor()
 
-        # Eventos para o seletor.
+        # Eventos do seletor. O ID é normalizado em Python, igual à tela Vendas.
         cur.execute("""
             SELECT IDEvento, NomeEvento, DataEvento, Cidade
             FROM tblEvento
             ORDER BY DataEvento DESC, NomeEvento
         """)
         eventos = []
+        evento_map = {}
         for r in cur.fetchall():
-            eventos.append({
-                "id": access_int(r[0]),
+            eid = access_int(r[0])
+            item = {
+                "id": eid,
                 "nome": str(r[1] or ""),
                 "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
                 "cidade": str(r[3] or "")
-            })
+            }
+            eventos.append(item)
+            evento_map[eid] = item
 
-        # Formas de pagamento para o formulário flutuante de pagamento.
-        cur.execute("SELECT IDFormaPagamento, FormaPagamento FROM tblFormaPagamento ORDER BY IDFormaPagamento")
+        # Formas de pagamento usadas pelo formulário da página.
         formas_pagamento = []
-        for r in cur.fetchall():
-            formas_pagamento.append({
-                "id": access_int(r[0]),
-                "nome": str(r[1] or "")
-            })
+        try:
+            cur.execute("SELECT IDFormaPagamento, FormaPagamento FROM tblFormaPagamento ORDER BY IDFormaPagamento")
+            for r in cur.fetchall():
+                formas_pagamento.append({
+                    "id": access_int(r[0]),
+                    "nome": str(r[1] or "")
+                })
+        except Exception:
+            formas_pagamento = []
 
         data = []
-        if evento_id:
-            eid = access_int(evento_id)
-            cur.execute("""
-                SELECT V.IDVenda, V.IDCliente, C.Nome AS Atleta,
-                       C.Telefone, C.Contato, V.IDEvento, E.NomeEvento,
-                       E.DataEvento, V.QtdProvas, V.ValorFinal,
-                       V.Finalizado, V.DataFinalizacao, V.StatusPagamento
-                FROM (((tblVendaPacotes AS V
-                INNER JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
-                INNER JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
-                LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda)
-                WHERE V.IDEvento=?
-                  AND (S.StatusVenda Is Null OR UCASE(S.StatusVenda) NOT LIKE '%CANCEL%')
-                ORDER BY C.Nome, V.IDVenda
-            """, [eid])
-            vendas = cur.fetchall()
+        evento_selecionado = 0
 
-            # Pagamentos registrados. Uma venda pode ter mais de um pagamento.
-            cur.execute("SELECT IDVenda FROM tblPagamento")
-            pagos = set()
-            for r in cur.fetchall():
+        if evento_param:
+            evento_selecionado = access_int(evento_param)
+        elif eventos:
+            evento_selecionado = eventos[0]["id"]
+
+        if evento_selecionado:
+            evento_info = evento_map.get(evento_selecionado, {})
+            evento_nome = evento_info.get("nome", "")
+            evento_data = evento_info.get("data", "")
+
+            # =============================================================
+            # IMPORTANTE:
+            # NÃO filtrar IDEvento dentro do SQL.
+            #
+            # Na tela Vendas a venda é lida inteira e o IDEvento é
+            # normalizado em Python. Isso é necessário porque alguns IDs
+            # antigos migrados do Access chegam ao PostgreSQL em formatos
+            # diferentes (bytes/bytea/texto). O filtro SQL por CAST(TEXT)
+            # fazia a Entregas retornar ZERO linhas mesmo existindo a venda.
+            # =============================================================
+
+            # Mapa de clientes usando as mesmas regras da tela Vendas.
+            def _num_ent(v):
+                if v is None:
+                    return 0
+                if isinstance(v, memoryview):
+                    v = v.tobytes()
+                if isinstance(v, (bytes, bytearray)):
+                    raw = bytes(v).rstrip(b'\\x00')
+                    if not raw:
+                        return 0
+                    try:
+                        txt = raw.decode('ascii').strip()
+                        if txt and txt.isdigit():
+                            return int(txt)
+                    except Exception:
+                        pass
+                    return int.from_bytes(raw, byteorder='little', signed=False)
+                if isinstance(v, str):
+                    if len(v) == 1:
+                        return ord(v)
+                    s = v.strip()
+                    if not s:
+                        return 0
+                    try:
+                        return int(s)
+                    except Exception:
+                        return 0
                 try:
-                    pagos.add(access_int(r[0]))
+                    return int(v)
+                except Exception:
+                    return 0
+
+            def _id_chaves_ent(v):
+                chaves = []
+                if v is None:
+                    return chaves
+                try:
+                    bruto = str(v).strip()
+                    if bruto:
+                        chaves.append(("raw", bruto))
                 except Exception:
                     pass
+                n = _num_ent(v)
+                if n:
+                    chaves.append(("num", n))
+                return chaves
+
+            cliente_map = {}
+            cliente_raw_map = {}
+            cur.execute("SELECT IDCliente, Nome FROM tblClientes")
+            for r in cur.fetchall():
+                nome = str(r[1] or "").strip()
+                if not nome:
+                    continue
+                for tipo, chave in _id_chaves_ent(r[0]):
+                    if tipo == "num":
+                        cliente_map[chave] = nome
+                    else:
+                        cliente_raw_map[chave] = nome
+
+            def _resolver_cliente_ent(valor_id):
+                # Resolve diretamente em tblClientes. A Entregas usa a mesma
+                # origem da Venda e não cria/edita nenhum vínculo.
+                cid = _num_ent(valor_id)
+                if cid:
+                    try:
+                        cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=? LIMIT 1", [cid])
+                        row_cliente = cur.fetchone()
+                        if row_cliente and row_cliente[0]:
+                            nome = str(row_cliente[0]).strip()
+                            if nome:
+                                return nome, cid
+                    except Exception:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+
+                if cid and cid in cliente_map:
+                    return cliente_map[cid], cid
+                try:
+                    bruto = str(valor_id).strip()
+                except Exception:
+                    bruto = ""
+                if bruto and bruto in cliente_raw_map:
+                    return cliente_raw_map[bruto], cid
+                return "", cid
+
+            # A venda nasce do agendamento. Guardamos os dois caminhos de
+            # vínculo para recuperar o cliente quando o IDCliente da venda
+            # antiga não resolver diretamente.
+            cur.execute("SELECT IDVendas, IDAgendamento, IDCliente FROM tblAgendamentos")
+            ag_venda_cliente = {}
+            ag_venda_raw = {}
+            ag_agendamento_cliente = {}
+            ag_agendamento_raw = {}
+            for r in cur.fetchall():
+                idv_raw, aid_raw, cid_raw = r[0], r[1], r[2]
+                idv = _num_ent(idv_raw)
+                aid = _num_ent(aid_raw)
+                cid = _num_ent(cid_raw)
+                if idv:
+                    ag_venda_cliente[idv] = cid
+                try:
+                    raw = str(idv_raw).strip() if idv_raw is not None else ""
+                except Exception:
+                    raw = ""
+                if raw:
+                    ag_venda_raw[raw] = cid_raw
+                if aid:
+                    ag_agendamento_cliente[aid] = cid
+                try:
+                    raw = str(aid_raw).strip() if aid_raw is not None else ""
+                except Exception:
+                    raw = ""
+                if raw:
+                    ag_agendamento_raw[raw] = cid_raw
+
+            status_map = {}
+            try:
+                cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
+                status_map = {access_int(r[0]): str(r[1] or "").strip() for r in cur.fetchall()}
+            except Exception:
+                status_map = {}
+
+            # MESMA LEITURA DA TELA VENDAS: sem JOIN e sem WHERE IDEvento.
+            cur.execute("""
+                SELECT IDVenda, DataVenda, IDCliente, IDEvento,
+                       QtdProvas, ValorFinal, Finalizado,
+                       DataFinalizacao, StatusPagamento, IDStatusVenda,
+                       IDAgendamento
+                FROM tblVendaPacotes
+                ORDER BY IDVenda DESC
+            """)
+            vendas = cur.fetchall()
 
             termo = search.lower()
+
             for r in vendas:
                 id_venda = access_int(r[0])
+                id_cliente_raw = r[2]
+                id_evento_raw = r[3]
+                id_agendamento_raw = r[10]
+                id_evento = access_int(id_evento_raw)
+
+                # O filtro acontece DEPOIS da normalização do ID, não no SQL.
+                if id_evento != evento_selecionado:
+                    continue
+
+                atleta, cliente_id = _resolver_cliente_ent(id_cliente_raw)
+                telefone = ""
+                contato = ""
+
+                # Caminho principal: VENDA -> AGENDAMENTO -> CLIENTE.
+                if not atleta and id_venda:
+                    cid_ag = ag_venda_cliente.get(id_venda, 0)
+                    if cid_ag:
+                        atleta = cliente_map.get(cid_ag, "")
+                        if atleta:
+                            cliente_id = cid_ag
+
+                if not atleta and id_venda:
+                    try:
+                        venda_txt = str(r[0]).strip() if r[0] is not None else ""
+                    except Exception:
+                        venda_txt = ""
+                    if venda_txt:
+                        cid_raw = ag_venda_raw.get(venda_txt)
+                        if cid_raw is not None:
+                            atleta, cliente_id = _resolver_cliente_ent(cid_raw)
+
+                # Fallback: VENDA -> IDAgendamento -> CLIENTE.
+                id_agendamento = _num_ent(id_agendamento_raw)
+                if not atleta and id_agendamento:
+                    cid_ag = ag_agendamento_cliente.get(id_agendamento, 0)
+                    if cid_ag:
+                        atleta = cliente_map.get(cid_ag, "")
+                        if atleta:
+                            cliente_id = cid_ag
+
+                if not atleta:
+                    try:
+                        aid_txt = str(id_agendamento_raw).strip() if id_agendamento_raw is not None else ""
+                    except Exception:
+                        aid_txt = ""
+                    if aid_txt:
+                        cid_raw = ag_agendamento_raw.get(aid_txt)
+                        if cid_raw is not None:
+                            atleta, cliente_id = _resolver_cliente_ent(cid_raw)
+
+                # Último recurso no PostgreSQL, mantendo a mesma estratégia da
+                # tela Vendas para IDs antigos que não sejam reproduzidos pelo
+                # valor normalizado em Python.
+                if not atleta and id_venda and _is_postgres():
+                    try:
+                        cur.execute("""
+                            SELECT A.IDCliente
+                            FROM tblAgendamentos AS A
+                            WHERE CAST(A.IDVendas AS TEXT)=CAST(? AS TEXT)
+                            ORDER BY A.IDAgendamento DESC
+                            LIMIT 1
+                        """, [id_venda])
+                        ag_row = cur.fetchone()
+                        if ag_row:
+                            atleta, cliente_id = _resolver_cliente_ent(ag_row[0])
+                            if not atleta:
+                                cur.execute("""
+                                    SELECT Nome FROM tblClientes
+                                    WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
+                                    LIMIT 1
+                                """, [ag_row[0]])
+                                cr = cur.fetchone()
+                                if cr and cr[0]:
+                                    atleta = str(cr[0]).strip()
+                    except Exception:
+                        pass
+
+                if not atleta and id_agendamento_raw is not None and _is_postgres():
+                    try:
+                        cur.execute("""
+                            SELECT A.IDCliente
+                            FROM tblAgendamentos AS A
+                            WHERE CAST(A.IDAgendamento AS TEXT)=CAST(? AS TEXT)
+                            ORDER BY A.IDAgendamento DESC
+                            LIMIT 1
+                        """, [id_agendamento_raw])
+                        ag_row = cur.fetchone()
+                        if ag_row:
+                            atleta, cliente_id = _resolver_cliente_ent(ag_row[0])
+                            if not atleta:
+                                cur.execute("""
+                                    SELECT Nome FROM tblClientes
+                                    WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
+                                    LIMIT 1
+                                """, [ag_row[0]])
+                                cr = cur.fetchone()
+                                if cr and cr[0]:
+                                    atleta = str(cr[0]).strip()
+                    except Exception:
+                        pass
+
+                # Recupera telefone/contato somente depois de descobrir o
+                # cliente. Esses campos são apenas auxiliares da tela.
+                if cliente_id:
+                    try:
+                        cur.execute("""
+                            SELECT Telefone, Contato
+                            FROM tblClientes
+                            WHERE CAST(IDCliente AS TEXT)=CAST(? AS TEXT)
+                            LIMIT 1
+                        """, [cliente_id])
+                        cr = cur.fetchone()
+                        if cr:
+                            telefone = str(cr[0] or "")
+                            contato = str(cr[1] or "")
+                    except Exception:
+                        pass
+
+                status_pagamento = str(r[8] or "aberto").strip().lower()
+
                 item = {
                     "id": id_venda,
-                    "cliente_id": access_int(r[1]),
-                    "atleta": str(r[2] or ""),
-                    "telefone": str(r[3] or ""),
-                    "contato": str(r[4] or ""),
-                    "evento_id": access_int(r[5]),
-                    "evento": str(r[6] or ""),
-                    "data_evento": r[7].strftime("%d/%m/%Y") if hasattr(r[7], "strftime") else str(r[7] or ""),
-                    "provas": access_int(r[8]),
-                    "valor": money(r[9]),
-                    "entregue": bool(r[10]) if r[10] is not None else False,
-                    "data_finalizacao": r[11].strftime("%d/%m/%Y") if hasattr(r[11], "strftime") else str(r[11] or ""),
-                    "status_pagamento": str(r[12] or "aberto").strip().lower(),
-                    "pago": str(r[12] or "aberto").strip().lower() == "pago",
-                    "cortesia": str(r[12] or "aberto").strip().lower() == "cortesia"
+                    "cliente_id": cliente_id,
+                    "atleta": atleta,
+                    "telefone": telefone,
+                    "contato": contato,
+                    "evento_id": id_evento,
+                    "evento": evento_nome,
+                    "data_evento": evento_data,
+                    "provas": access_int(r[4]),
+                    "valor": money(r[5]),
+                    "entregue": bool(r[6]) if r[6] is not None else False,
+                    "data_finalizacao": (
+                        r[7].strftime("%d/%m/%Y")
+                        if hasattr(r[7], "strftime")
+                        else str(r[7] or "")
+                    ),
+                    "status_pagamento": status_pagamento,
+                    "pago": status_pagamento == "pago",
+                    "cortesia": status_pagamento == "cortesia"
                 }
+
                 if not termo or termo in (item["atleta"] + " " + item["evento"]).lower():
                     data.append(item)
 
+            print(f"[SGFE-ENTREGAS] evento_selecionado={evento_selecionado} vendas_exibidas={len(data)}")
+            for item in data:
+                if not item["atleta"]:
+                    print(f"[SGFE-ENTREGAS] atleta_nao_localizado venda={item['id']} cliente={item['cliente_id']}")
+
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        erro = str(e)
+        data = []
+        print(f"[SGFE-ENTREGAS] ERRO_LISTAGEM={e}")
     finally:
         conn.close()
 
     return render_template(
         "entregas.html", page="entregas", title="Entregas",
         subtitle="Controle de entrega das fotos e situação do pagamento",
-        eventos=eventos, evento_selecionado=access_int(evento_id) if evento_id else 0,
+        eventos=eventos, evento_selecionado=evento_selecionado,
         data=data, search=search, mensagem=mensagem, erro=erro,
         formas_pagamento=formas_pagamento
     )
