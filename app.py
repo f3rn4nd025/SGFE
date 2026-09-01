@@ -2120,7 +2120,7 @@ def api_evento_geral():
             cur.execute("""
                 SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
                 FROM tblEvento
-                WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)
+                WHERE IDEvento=?
             """, [str(evento_id)])
 
             r = cur.fetchone()
@@ -2140,7 +2140,7 @@ def api_evento_geral():
                 # -------------------------------------------------
                 resumo["agendamentos"] = int(scalar(
                     cur,
-                    "SELECT Count(*) FROM tblAgendamentos WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)",
+                    "SELECT Count(*) FROM tblAgendamentos WHERE IDEvento=?",
                     0,
                     [str(evento_id)]
                 ) or 0)
@@ -2152,7 +2152,7 @@ def api_evento_geral():
                     SELECT V.IDVenda, V.ValorFinal, V.Finalizado,
                            V.StatusPagamento
                     FROM tblVendaPacotes AS V
-                    WHERE CAST(V.IDEvento AS TEXT)=CAST(? AS TEXT)
+                    WHERE V.IDEvento=?
                 """, [str(evento_id)])
 
                 vendas_evento = cur.fetchall()
@@ -4191,7 +4191,7 @@ def api_precos(evento_id):
         cur=conn.cursor()
         cur.execute("""
         SELECT QtdProvas,Valor FROM tblPrecoEvento
-        WHERE CAST(IdEvento AS TEXT)=CAST(? AS TEXT) ORDER BY QtdProvas
+        WHERE IdEvento=? ORDER BY QtdProvas
         """,[evento_id])
         return jsonify([{"qtd":r[0],"valor":float(r[1] or 0)} for r in cur.fetchall()])
     finally:
@@ -4259,11 +4259,6 @@ def web_vendas():
             return int.from_bytes(raw, byteorder="little", signed=False)
 
         if isinstance(v, str):
-            # IDs migrados como um único caractere: o code point é o ID.
-            # Ex.: '4'=52, '5'=53, '\\t'=9, '\\x1f'=31, 'ć'=263.
-            if len(v) == 1:
-                return ord(v)
-
             s = v.strip()
             if not s:
                 return 0
@@ -4310,10 +4305,7 @@ def web_vendas():
         """)
         evento_map = {}
         for r in cur.fetchall():
-            # IMPORTANTE: o filtro antigo que funcionava usava access_int().
-            # Mantemos isso aqui para o ID escolhido no combo ser o mesmo ID
-            # usado em tblVendaPacotes.
-            eid = access_int(r[0])
+            eid = _num(r[0])
             evento_map[eid] = {
                 "id": eid,
                 "nome": _txt(r[1]),
@@ -4325,8 +4317,7 @@ def web_vendas():
 
         if evento_param:
             try:
-                # Mesma conversão da versão em que o filtro funcionava.
-                candidato = access_int(evento_param)
+                candidato = _num(evento_param)
             except Exception:
                 candidato = 0
             if candidato in evento_map:
@@ -4434,11 +4425,9 @@ def web_vendas():
         cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
         status_map = {_num(r[0]): _txt(r[1]) for r in cur.fetchall()}
 
-        # A venda é lida diretamente, sem JOIN por IDs e SEM WHERE IDEvento.
-        # Esta é a mesma estratégia usada pela tela ENTREGAS, que já está
-        # funcionando corretamente. No PostgreSQL, IDEvento é character varying
-        # e alguns registros antigos podem ter representações diferentes.
-        # Por isso o filtro é feito em Python, depois de normalizar o ID.
+        # A venda é lida diretamente, sem JOIN por IDs. A mesma estratégia
+        # usada na tela de ATLETAS é aplicada aqui: ler por posição e depois
+        # montar aliases para o template.
         cur.execute("""
             SELECT
                 IDVenda,
@@ -4463,8 +4452,7 @@ def web_vendas():
             evento_id = _num(r[3])
             status_id = _num(r[8])
 
-            # FILTRO DE EVENTO: exatamente como na tela ENTREGAS.
-            # Só compara depois que IDEvento foi normalizado em Python.
+            # Mantém o filtro por evento exatamente como no sistema local.
             if evento_selecionado and evento_id != evento_selecionado:
                 continue
 
@@ -4890,6 +4878,10 @@ html, body{
     flex:0 0 auto !important;
     white-space:nowrap !important;
 }
+/* CAMPO FINALIZADO: permanece no código/dados, mas fica oculto somente na lista de VENDAS/PACOTES. */
+.sgfe-vendas-finalizado-oculto{
+    display:none !important;
+}
 </style>
 
 <script>
@@ -4898,6 +4890,23 @@ html, body{
 
     function texto(el){
         return (el && (el.innerText || el.textContent) || '').replace(/\s+/g,' ').trim();
+    }
+
+    function ocultarColunaFinalizado(){
+        /* Mantém Finalizado disponível para a lógica do sistema,
+           escondendo apenas a coluna visual na tabela de Vendas/Pacotes. */
+        document.querySelectorAll('table').forEach(function(table){
+            const headers = Array.from(table.querySelectorAll('thead th'));
+            const idx = headers.findIndex(function(th){
+                return texto(th).replace(/\s+/g,' ').trim().toLowerCase() === 'finalizado';
+            });
+            if(idx < 0) return;
+
+            headers[idx].classList.add('sgfe-vendas-finalizado-oculto');
+            table.querySelectorAll('tbody tr').forEach(function(tr){
+                if(tr.children[idx]) tr.children[idx].classList.add('sgfe-vendas-finalizado-oculto');
+            });
+        });
     }
 
     function removerSomenteEventoDireita(){
@@ -4925,6 +4934,12 @@ html, body{
         return;
     }
 
+    document.addEventListener('DOMContentLoaded', function(){
+        ocultarColunaFinalizado();
+        removerSomenteEventoDireita();
+        ajustarSomenteMenuVendasPacotes();
+    });
+
     function removerContadorVendas(){
         /* Remove SOMENTE "0 venda(s) encontrada(s)" ou equivalente. */
         const regex=/^\d+\s+venda\(s\)\s+encontrada\(s\)$/i;
@@ -4940,22 +4955,6 @@ html, body{
             if(!filhoComMesmoTexto){
                 el.remove();
             }
-        });
-    }
-
-    function ocultarColunaFinalizado(){
-        /* SOMENTE visual: mantém Finalizado no objeto/SQL para o funcionamento
-           da venda, mas não mostra a coluna na tabela de Vendas / Pacotes. */
-        document.querySelectorAll('table').forEach(function(table){
-            const ths=Array.from(table.querySelectorAll('thead th'));
-            const indice=ths.findIndex(function(th){
-                return texto(th).toUpperCase()==='FINALIZADO';
-            });
-            if(indice < 0) return;
-            ths[indice].style.display='none';
-            table.querySelectorAll('tbody tr').forEach(function(tr){
-                if(tr.children[indice]) tr.children[indice].style.display='none';
-            });
         });
     }
 
@@ -5015,46 +5014,6 @@ html, body{
         const frase='Escolha o evento para visualizar somente as vendas/pacotes dele.';
         const evento=document.querySelector('select[name="evento"]');
         if(!evento) return;
-
-        /* FILTRO DE EVENTO: a troca do evento precisa efetivamente
-           recarregar /vendas com ?evento=ID.
-           Mantemos a pesquisa q, quando existir.
-           Não altera os nomes dos atletas nem qualquer dado da venda. */
-        /* FILTRO DE EVENTO - versão robusta.
-           O listener é delegado no document para continuar funcionando mesmo
-           se algum script reconstruir o <select> depois do carregamento.
-           A mudança também é colocada em onchange como segunda camada. */
-        function aplicarFiltroEvento(el){
-            if(!el) return;
-            const valor=String(el.value || '').trim();
-            const url=new URL(window.location.href);
-            url.pathname='/vendas';
-            if(valor && valor !== '0'){
-                url.searchParams.set('evento',valor);
-            }else{
-                url.searchParams.delete('evento');
-            }
-            const q=url.searchParams.get('q');
-            if(q) url.searchParams.set('q',q);
-            else url.searchParams.delete('q');
-            window.location.assign(url.toString());
-        }
-
-        if(!window.__sgfeFiltroEventoDelegado){
-            window.__sgfeFiltroEventoDelegado=true;
-            document.addEventListener('change',function(e){
-                const alvo=e.target;
-                if(alvo && alvo.matches && alvo.matches('select[name="evento"]')){
-                    e.stopPropagation();
-                    aplicarFiltroEvento(alvo);
-                }
-            },true);
-        }
-
-        if(!evento.dataset.sgfeFiltroEventoAtivo){
-            evento.dataset.sgfeFiltroEventoAtivo='1';
-            evento.onchange=function(){ aplicarFiltroEvento(this); };
-        }
 
         removerContadorVendas();
 
@@ -5116,7 +5075,6 @@ html, body{
         }
 
         organizarTabela();
-        ocultarColunaFinalizado();
         organizarBotoes();
     }
 
@@ -6401,37 +6359,6 @@ def web_entregas():
             # =============================================================
 
             # Mapa de clientes usando as mesmas regras da tela Vendas.
-            def _num_ent(v):
-                if v is None:
-                    return 0
-                if isinstance(v, memoryview):
-                    v = v.tobytes()
-                if isinstance(v, (bytes, bytearray)):
-                    raw = bytes(v).rstrip(b'\\x00')
-                    if not raw:
-                        return 0
-                    try:
-                        txt = raw.decode('ascii').strip()
-                        if txt and txt.isdigit():
-                            return int(txt)
-                    except Exception:
-                        pass
-                    return int.from_bytes(raw, byteorder='little', signed=False)
-                if isinstance(v, str):
-                    if len(v) == 1:
-                        return ord(v)
-                    s = v.strip()
-                    if not s:
-                        return 0
-                    try:
-                        return int(s)
-                    except Exception:
-                        return 0
-                try:
-                    return int(v)
-                except Exception:
-                    return 0
-
             def _id_chaves_ent(v):
                 chaves = []
                 if v is None:
@@ -6442,7 +6369,7 @@ def web_entregas():
                         chaves.append(("raw", bruto))
                 except Exception:
                     pass
-                n = _num_ent(v)
+                n = access_int(v)
                 if n:
                     chaves.append(("num", n))
                 return chaves
@@ -6463,7 +6390,7 @@ def web_entregas():
             def _resolver_cliente_ent(valor_id):
                 # Resolve diretamente em tblClientes. A Entregas usa a mesma
                 # origem da Venda e não cria/edita nenhum vínculo.
-                cid = _num_ent(valor_id)
+                cid = access_int(valor_id)
                 if cid:
                     try:
                         cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=? LIMIT 1", [cid])
@@ -6498,9 +6425,9 @@ def web_entregas():
             ag_agendamento_raw = {}
             for r in cur.fetchall():
                 idv_raw, aid_raw, cid_raw = r[0], r[1], r[2]
-                idv = _num_ent(idv_raw)
-                aid = _num_ent(aid_raw)
-                cid = _num_ent(cid_raw)
+                idv = access_int(idv_raw)
+                aid = access_int(aid_raw)
+                cid = access_int(cid_raw)
                 if idv:
                     ag_venda_cliente[idv] = cid
                 try:
@@ -6572,7 +6499,7 @@ def web_entregas():
                             atleta, cliente_id = _resolver_cliente_ent(cid_raw)
 
                 # Fallback: VENDA -> IDAgendamento -> CLIENTE.
-                id_agendamento = _num_ent(id_agendamento_raw)
+                id_agendamento = access_int(id_agendamento_raw)
                 if not atleta and id_agendamento:
                     cid_ag = ag_agendamento_cliente.get(id_agendamento, 0)
                     if cid_ag:
