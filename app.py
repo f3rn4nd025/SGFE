@@ -5029,11 +5029,13 @@ html, body{
         if(headRow && !table.dataset.sgfeEdicaoAcoes){
             const headers=Array.from(headRow.cells);
             let indiceDataFinalizacao=-1;
+            let indiceFinalizado=-1;
             let indiceData=-1;
             let indiceAcaoAntiga=-1;
             headers.forEach(function(cell, i){
                 const t=texto(cell).toUpperCase();
                 if(t==='DATA FINALIZAÇÃO' || t==='DATA FINALIZACAO') indiceDataFinalizacao=i;
+                if(t==='FINALIZADO') indiceFinalizado=i;
                 if(t==='DATA') indiceData=i;
                 if(t==='AÇÃO' || t==='ACAO') indiceAcaoAntiga=i;
             });
@@ -5041,6 +5043,15 @@ html, body{
             if(indiceDataFinalizacao>=0){
                 Array.from(table.rows).forEach(function(row){
                     if(row.cells[indiceDataFinalizacao]) row.cells[indiceDataFinalizacao].style.display='none';
+                });
+            }
+
+            /* Retira somente a coluna FINALIZADO da visualização da tabela.
+               O campo continua existindo no banco e nas regras internas do
+               sistema, para não alterar nenhuma função já funcionando. */
+            if(indiceFinalizado>=0){
+                Array.from(table.rows).forEach(function(row){
+                    if(row.cells[indiceFinalizado]) row.cells[indiceFinalizado].style.display='none';
                 });
             }
 
