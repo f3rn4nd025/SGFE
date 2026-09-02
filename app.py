@@ -292,6 +292,16 @@ def aplicar_modal_sgfe(response):
 (function(){
   'use strict';
 
+  // === AVISO TEMPORÁRIO DE DIAGNÓSTICO (pode ser removido depois) ===
+  // Mostra numa caixinha na tela qualquer erro de JavaScript que acontecer
+  // na página, para ajudar a identificar por que um botão não está
+  // respondendo, sem precisar abrir o console do navegador (F12).
+  window.addEventListener('error', function(ev){
+    try{
+      alert('Aviso de diagnóstico (erro no JavaScript da página):\n\n' + (ev && ev.message ? ev.message : 'erro desconhecido'));
+    }catch(e){}
+  });
+
   var modal, titulo, mensagem, confirmar, cancelar, icone;
   var pendente=null;
   var liberados=[];
