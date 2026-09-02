@@ -5978,7 +5978,12 @@ def excluir_modalidade(modalidade_id):
 
 def _despesas_colunas(cur):
     cur.execute("SELECT * FROM tblDespesasEvento WHERE 1=0")
-    return [d[0] for d in cur.description]
+    # PostgreSQL sempre devolve os nomes das colunas em minúsculo, mesmo
+    # que a tabela tenha sido criada com maiúsculas. Normalizamos aqui
+    # para minúsculo, e as comparações feitas com esta lista (mais abaixo)
+    # também usam minúsculo — isso funciona igual no Access, cujos
+    # identificadores também não diferenciam maiúsculas de minúsculas.
+    return [d[0].lower() if isinstance(d[0], str) else d[0] for d in cur.description]
 
 
 @app.route("/despesas", methods=["GET", "POST"])
@@ -6026,11 +6031,11 @@ def web_despesas():
 
             # Usa somente os campos que realmente existem no Access.
             mapa = {
-                "Descricao": descricao, "Descrição": descricao, "DescricaoDespesa": descricao,
-                "ValorDespesa": valor, "Valor": valor,
-                "DataDespesa": data, "Data": data,
-                "IDEvento": access_int(evento_id),
-                "Observacoes": observacoes, "Observações": observacoes
+                "descricao": descricao, "descrição": descricao, "descricaodespesa": descricao,
+                "valordespesa": valor, "valor": valor,
+                "datadespesa": data, "data": data,
+                "idevento": access_int(evento_id),
+                "observacoes": observacoes, "observações": observacoes
             }
             campos, valores = [], []
             for c in colunas_db:
@@ -6038,7 +6043,7 @@ def web_despesas():
                     campos.append(c)
                     valores.append(mapa[c])
 
-            if "IDEvento" not in campos:
+            if "idevento" not in campos:
                 raise ValueError("A tabela de despesas não possui o campo IDEvento necessário para vincular a despesa ao evento.")
             if not campos:
                 raise ValueError("Não foi possível identificar os campos da tabela de despesas.")
@@ -6051,19 +6056,19 @@ def web_despesas():
             return redirect(url_for("web_despesas", evento=access_int(evento_id), ok="Despesa registrada no evento com sucesso."))
 
         # Lista somente o evento selecionado. Sem seleção, mostra todas as despesas.
-        where = ""
-        params = []
-        if evento_filtro:
-            where = " WHERE D.IDEvento=? "
-            params.append(access_int(evento_filtro))
+        # IMPORTANTE: NÃO filtrar por D.IDEvento no SQL comparando com um
+        # número — mesmo problema de tipos (varchar x integer) já visto e
+        # corrigido em várias outras telas. O filtro é feito em Python,
+        # depois de normalizar o ID.
+        eid_filtro = access_int(evento_filtro) if evento_filtro else 0
 
         # Consulta amigável, sem expor IDs internos como a tela antiga fazia.
-        descricao_col = next((c for c in ["Descricao", "Descrição", "DescricaoDespesa"] if c in colunas_db), None)
-        valor_col = next((c for c in ["ValorDespesa", "Valor"] if c in colunas_db), None)
-        data_col = next((c for c in ["DataDespesa", "Data"] if c in colunas_db), None)
-        obs_col = next((c for c in ["Observacoes", "Observações"] if c in colunas_db), None)
+        descricao_col = next((c for c in ["descricao", "descrição", "descricaodespesa"] if c in colunas_db), None)
+        valor_col = next((c for c in ["valordespesa", "valor"] if c in colunas_db), None)
+        data_col = next((c for c in ["datadespesa", "data"] if c in colunas_db), None)
+        obs_col = next((c for c in ["observacoes", "observações"] if c in colunas_db), None)
 
-        if not descricao_col or not valor_col or not data_col or "IDEvento" not in colunas_db:
+        if not descricao_col or not valor_col or not data_col or "idevento" not in colunas_db:
             raise ValueError("A tabela de despesas precisa ter Descricao, ValorDespesa, DataDespesa e IDEvento.")
 
         obs_sql = f", D.[{obs_col}]" if obs_col else ", Null"
@@ -6072,11 +6077,10 @@ def web_despesas():
                    D.[{valor_col}], D.IDEvento{obs_sql}
             FROM tblDespesasEvento AS D
             LEFT JOIN tblEvento AS E ON D.IDEvento=E.IDEvento
-            {where}
             ORDER BY D.[{data_col}] DESC
         """
-        cur.execute(sql, params)
-        rows = cur.fetchall()
+        cur.execute(sql)
+        rows = [r for r in cur.fetchall() if not eid_filtro or access_int(r[5]) == eid_filtro]
 
         data = []
         for r in rows:
@@ -6089,10 +6093,7 @@ def web_despesas():
                 "observacoes": str(r[6] or "")
             })
 
-        total_sql = f"SELECT Sum(D.[{valor_col}]) FROM tblDespesasEvento AS D"
-        if where:
-            total_sql += " WHERE D.IDEvento=?"
-        total = money(scalar(cur, total_sql, 0, params))
+        total = money(sum(r["valor"] for r in data))
 
         colunas = ["Descrição", "Data", "Evento", "Cidade", "Valor", "Observações"]
     except Exception as e:
