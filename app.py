@@ -6238,54 +6238,50 @@ def geral_eventos():
             evento_selecionado = eventos[0]["id"]
 
         if evento_selecionado:
-            cur.execute("""
-                SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
-                FROM tblEvento
-                WHERE IDEvento=?
-            """, [evento_selecionado])
-            r = cur.fetchone()
-            if r:
-                evento_info = {
-                    "id": access_int(r[0]),
-                    "nome": str(r[1] or ""),
-                    "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
-                    "cidade": str(r[3] or ""),
-                    "ativo": bool(r[4]) if r[4] is not None else False,
-                }
+            evento_info = next((e for e in eventos if e["id"] == evento_selecionado), None)
+            if evento_info:
+                # IMPORTANTE: NÃO comparar/juntar IDEvento (character varying,
+                # herança da migração do Access) direto no SQL com um número
+                # ou outra tabela. Mesmo problema de tipos já visto e
+                # corrigido em VENDAS, PAGAMENTOS, PAGAMENTOS PENDENTES,
+                # ENTREGAS e HISTÓRICO — aqui ele deixava a conexão numa
+                # transação abortada, e a consulta seguinte quebrava com um
+                # erro genérico ("list index out of range") em vez do erro
+                # real. Cada tabela é lida por completo e cruzada em Python.
 
-                resumo["agendamentos"] = int(scalar(cur,
-                    "SELECT Count(*) FROM tblAgendamentos WHERE IDEvento=?", 0, [evento_selecionado]) or 0)
+                cur.execute("SELECT IDEvento FROM tblAgendamentos")
+                resumo["agendamentos"] = sum(
+                    1 for r2 in cur.fetchall() if access_int(r2[0]) == evento_selecionado
+                )
 
-                # Vendas do evento e situação de entrega.
+                cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
+                status_nome_map = {access_int(r2[0]): str(r2[1] or "") for r2 in cur.fetchall()}
+
                 cur.execute("""
-                    SELECT V.IDVenda, V.ValorFinal, V.Finalizado, V.StatusPagamento
-                    FROM tblVendaPacotes AS V
-                    LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda
-                    WHERE V.IDEvento=?
-                      AND (S.StatusVenda Is Null OR UCASE(S.StatusVenda) NOT LIKE '%CANCEL%')
-                """, [evento_selecionado])
-                vendas_evento = cur.fetchall()
+                    SELECT IDVenda, ValorFinal, Finalizado, StatusPagamento,
+                           IDStatusVenda, IDEvento
+                    FROM tblVendaPacotes
+                """)
+                vendas_evento = [
+                    r2 for r2 in cur.fetchall()
+                    if access_int(r2[5]) == evento_selecionado
+                    and "CANCEL" not in status_nome_map.get(access_int(r2[4]), "").upper()
+                ]
                 resumo["vendas"] = len(vendas_evento)
-                resumo["total_vendido"] = sum(float(r[1] or 0) for r in vendas_evento)
-                resumo["entregas_pendentes"] = sum(1 for r in vendas_evento if r[2] is None or not bool(r[2]))
+                resumo["total_vendido"] = sum(float(r2[1] or 0) for r2 in vendas_evento)
+                resumo["entregas_pendentes"] = sum(1 for r2 in vendas_evento if r2[2] is None or not bool(r2[2]))
 
+                cur.execute("SELECT IDVenda, Sum(ValorPago) FROM tblPagamento GROUP BY IDVenda")
                 pagamentos = {}
-                cur.execute("""
-                    SELECT P.IDVenda, Sum(P.ValorPago)
-                    FROM tblPagamento AS P
-                    INNER JOIN tblVendaPacotes AS V ON P.IDVenda=V.IDVenda
-                    WHERE V.IDEvento=?
-                    GROUP BY P.IDVenda
-                """, [evento_selecionado])
-                for r in cur.fetchall():
-                    pagamentos[access_int(r[0])] = float(r[1] or 0)
+                for r2 in cur.fetchall():
+                    pagamentos[access_int(r2[0])] = float(r2[1] or 0)
 
                 recebido = 0.0
                 pendentes = 0
-                for r in vendas_evento:
-                    venda_id = access_int(r[0])
-                    valor = float(r[1] or 0)
-                    status_pg = str(r[3] or "aberto").strip().lower()
+                for r2 in vendas_evento:
+                    venda_id = access_int(r2[0])
+                    valor = float(r2[1] or 0)
+                    status_pg = str(r2[3] or "aberto").strip().lower()
                     pago = pagamentos.get(venda_id, 0.0)
                     if status_pg == "cortesia":
                         continue
@@ -6297,11 +6293,10 @@ def geral_eventos():
 
                 # Despesas vinculadas ao evento.
                 try:
-                    resumo["despesas"] = money(scalar(
-                        cur,
-                        "SELECT Sum(ValorDespesa) FROM tblDespesasEvento WHERE IDEvento=?",
-                        0,
-                        [evento_selecionado]
+                    cur.execute("SELECT IDEvento, ValorDespesa FROM tblDespesasEvento")
+                    resumo["despesas"] = money(sum(
+                        float(r2[1] or 0) for r2 in cur.fetchall()
+                        if access_int(r2[0]) == evento_selecionado
                     ))
                 except Exception:
                     resumo["despesas"] = 0.0
