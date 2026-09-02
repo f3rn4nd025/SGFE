@@ -891,6 +891,16 @@ def _criar_banco_fotografo(id_fotografo):
         admin = PostgreSQLCompatConnection(DATABASE_URL, schema="public")
         try:
             cur = admin.cursor()
+
+            # Só cria e copia os dados na PRIMEIRA vez. Sem esta checagem,
+            # a função tentava copiar tudo de novo em TODO login do
+            # fotógrafo — e como o schema já tinha os dados da vez
+            # anterior, o INSERT batia em chave primária duplicada
+            # (ex.: tblAgendamentos) e o login falhava.
+            cur.execute("SELECT 1 FROM information_schema.schemata WHERE schema_name=?", [schema])
+            if cur.fetchone():
+                return destino
+
             cur.execute("SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname='public' ORDER BY tablename")
             tabelas = [r[0] for r in cur.fetchall()]
             cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
