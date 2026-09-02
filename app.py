@@ -2211,11 +2211,15 @@ def api_evento_geral():
                     r for r in cur.fetchall()
                     if access_int(r[5]) == evento_selecionado
                     and "CANCEL" not in status_nome_map.get(access_int(r[4]), "").upper()
+                    and str(r[3] or "").strip().lower() != "cancelado"
                 ]
 
                 resumo["vendas"] = len(vendas_evento)
+                # Cortesia não participa do fechamento financeiro do evento:
+                # entra na contagem de vendas, mas com valor zerado.
                 resumo["total_vendido"] = sum(
                     float(r[1] or 0) for r in vendas_evento
+                    if str(r[3] or "").strip().lower() != "cortesia"
                 )
                 resumo["entregas_pendentes"] = sum(
                     1 for r in vendas_evento
@@ -4709,9 +4713,12 @@ def web_vendas():
             status_bruto_upper = status_bruto.strip().upper()
             status_pagamento_bruto = str(r[12] or "").strip().lower()
 
-            if "CANCEL" in status_bruto_upper or status_pagamento_bruto == "cancelado":
+            venda_cancelada = "CANCEL" in status_bruto_upper or status_pagamento_bruto == "cancelado"
+            venda_cortesia = "CORTESIA" in status_bruto_upper or status_pagamento_bruto == "cortesia"
+
+            if venda_cancelada:
                 status_nome = status_bruto if "CANCEL" in status_bruto_upper else nome_status_cancelada
-            elif "CORTESIA" in status_bruto_upper or status_pagamento_bruto == "cortesia":
+            elif venda_cortesia:
                 status_nome = status_bruto if "CORTESIA" in status_bruto_upper else nome_status_cortesia
             else:
                 pago = pagamentos_map.get(venda_id, 0.0)
@@ -4722,6 +4729,13 @@ def web_vendas():
                     status_nome = nome_status_parcial
                 else:
                     status_nome = nome_status_aberta
+
+            # Cancelada/cortesia não participam do fechamento financeiro do
+            # evento: aparecem na lista, mas com valor zerado.
+            if venda_cancelada or venda_cortesia:
+                valor_pacote = 0
+                valor_desconto = 0
+                valor_final = 0
 
             # Aliases em maiúsculo e minúsculo para manter compatibilidade
             # com o template atual, sem alterar o template nem outras telas.
@@ -6339,9 +6353,15 @@ def geral_eventos():
                     r2 for r2 in cur.fetchall()
                     if access_int(r2[5]) == evento_selecionado
                     and "CANCEL" not in status_nome_map.get(access_int(r2[4]), "").upper()
+                    and str(r2[3] or "").strip().lower() != "cancelado"
                 ]
                 resumo["vendas"] = len(vendas_evento)
-                resumo["total_vendido"] = sum(float(r2[1] or 0) for r2 in vendas_evento)
+                # Cortesia não participa do fechamento financeiro do evento:
+                # entra na contagem de vendas, mas com valor zerado.
+                resumo["total_vendido"] = sum(
+                    float(r2[1] or 0) for r2 in vendas_evento
+                    if str(r2[3] or "").strip().lower() != "cortesia"
+                )
                 resumo["entregas_pendentes"] = sum(1 for r2 in vendas_evento if r2[2] is None or not bool(r2[2]))
 
                 cur.execute("SELECT IDVenda, Sum(ValorPago) FROM tblPagamento GROUP BY IDVenda")
@@ -7585,7 +7605,8 @@ def web_pagamentos():
                 id_venda = access_int(r[0])
 
                 status_venda_nome = status_nome_map.get(_num_status(r[8]), "")
-                if "CANCEL" in status_venda_nome.upper():
+                status_pagamento_bruto = str(r[7] or "").strip().lower()
+                if "CANCEL" in status_venda_nome.upper() or status_pagamento_bruto == "cancelado":
                     continue
 
                 cli = _resolver_cliente(id_venda, r[2])
@@ -7593,6 +7614,9 @@ def web_pagamentos():
                 status_registrado = str(r[7] or "aberto").strip().lower()
                 recebido = float(pagamentos.get(id_venda, 0) or 0)
                 if status_registrado == "cortesia":
+                    # Cortesia não participa do fechamento financeiro do
+                    # evento: aparece com valor zerado.
+                    valor = 0.0
                     recebido = 0.0
                     aberto = 0.0
                     situacao = "cortesia"
@@ -7838,12 +7862,13 @@ def web_historico():
             status_registrado = str(r[11] or "aberto").strip().lower()
             recebido = pagos.get(id_venda, 0.0)
             cancelado = "cancel" in status_venda_lower or status_registrado == "cancelado"
+            cortesia = status_registrado == "cortesia"
 
             if cancelado:
                 recebido = 0.0
                 aberto = 0.0
                 situacao_pagamento = "cancelado"
-            elif status_registrado == "cortesia":
+            elif cortesia:
                 recebido = 0.0
                 aberto = 0.0
                 situacao_pagamento = "cortesia"
@@ -7857,6 +7882,15 @@ def web_historico():
                 aberto = max(valor - recebido, 0.0)
                 situacao_pagamento = "parcial"
 
+            # Cancelada/cortesia não participam do fechamento financeiro do
+            # evento: aparecem no histórico, mas com valor zerado.
+            pacote_exibido = float(r[5] or 0)
+            desconto_exibido = float(r[6] or 0)
+            if cancelado or cortesia:
+                valor = 0.0
+                pacote_exibido = 0.0
+                desconto_exibido = 0.0
+
             resolved_rows.append({
                 "id": id_venda,
                 "data_venda": _txt(r[1]),
@@ -7869,8 +7903,8 @@ def web_historico():
                 "data_evento": evento_info.get("data", ""),
                 "cidade": evento_info.get("cidade", ""),
                 "provas": access_int(r[4]),
-                "pacote": float(r[5] or 0),
-                "desconto": float(r[6] or 0),
+                "pacote": pacote_exibido,
+                "desconto": desconto_exibido,
                 "valor": valor,
                 "status": status_venda_nome,
                 "entregue": bool(r[9]) if r[9] is not None else False,
