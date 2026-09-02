@@ -6945,34 +6945,150 @@ def web_pagamentos_pendentes():
     conn = get_connection()
     try:
         cur = conn.cursor()
-        sql = """
-            SELECT V.IDVenda, C.Nome AS Atleta, E.NomeEvento AS Evento,
-                   V.QtdProvas, V.ValorFinal, V.DataVenda, C.Telefone, C.Contato
-            FROM ((tblVendaPacotes AS V
-            INNER JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
-            INNER JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
-            LEFT JOIN tblPagamento AS P ON V.IDVenda=P.IDVenda
-            WHERE P.IDPagamento Is Null
-              AND (V.StatusPagamento Is Null OR V.StatusPagamento='aberto')
-        """
-        params=[]
-        if venda_id:
-            sql += " AND V.IDVenda=?"
-            params.append(access_int(venda_id))
-        elif search:
-            sql += " AND (C.Nome LIKE ? OR E.NomeEvento LIKE ?)"
-            like="%"+search+"%"
-            params.extend([like,like])
-        sql += " ORDER BY V.IDVenda DESC"
-        cur.execute(sql, params)
-        pendentes=[]
+
+        # IMPORTANTE: NÃO fazer JOIN direto entre tblVendaPacotes e
+        # tblClientes/tblEvento/tblPagamento aqui. Mesmo problema de tipos
+        # (varchar x bigint/integer, herança da migração do Access) já
+        # visto e corrigido nas telas VENDAS, PAGAMENTOS e ENTREGAS. Cada
+        # tabela é lida separadamente e cruzada em Python.
+
+        def _num(v):
+            """Normaliza IDs migrados do Access (idêntica à usada nas
+            telas VENDAS/PAGAMENTOS para cliente/evento/venda)."""
+            if v is None:
+                return 0
+            if isinstance(v, memoryview):
+                v = v.tobytes()
+            if isinstance(v, (bytes, bytearray)):
+                raw = bytes(v).rstrip(b"\x00")
+                if not raw:
+                    return 0
+                try:
+                    txt = raw.decode("ascii").strip()
+                    if txt.isdigit():
+                        return int(txt)
+                    if txt.lower().startswith("\\x"):
+                        hx = txt[2:]
+                        if hx and len(hx) % 2 == 0:
+                            return int.from_bytes(bytes.fromhex(hx), "little", signed=False)
+                except Exception:
+                    pass
+                return int.from_bytes(raw, byteorder="little", signed=False)
+            if isinstance(v, str):
+                if len(v) == 1:
+                    return ord(v)
+                s = v.strip()
+                if not s:
+                    return 0
+                try:
+                    return int(s)
+                except Exception:
+                    pass
+                if s.lower().startswith("\\x"):
+                    try:
+                        hx = s[2:]
+                        if hx and len(hx) % 2 == 0:
+                            return int.from_bytes(bytes.fromhex(hx), "little", signed=False)
+                    except Exception:
+                        pass
+                try:
+                    raw = s.encode("latin1").rstrip(b"\x00")
+                    if raw:
+                        return int.from_bytes(raw, byteorder="little", signed=False)
+                except Exception:
+                    pass
+                return 0
+            try:
+                return int(v)
+            except Exception:
+                return 0
+
+        def _txt(v):
+            if v is None:
+                return ""
+            if hasattr(v, "strftime"):
+                return v.strftime("%d/%m/%Y")
+            return str(v)
+
+        # Clientes (nome/telefone/contato).
+        cur.execute("SELECT IDCliente, Nome, Telefone, Contato FROM tblClientes")
+        cliente_map = {}
+        cliente_raw_map = {}
         for r in cur.fetchall():
+            info = {"nome": _txt(r[1]), "telefone": _txt(r[2]), "contato": _txt(r[3])}
+            n = _num(r[0])
+            if n:
+                cliente_map[n] = info
+            bruto = str(r[0]).strip() if r[0] is not None else ""
+            if bruto:
+                cliente_raw_map[bruto] = info
+
+        # Vínculo VENDA -> AGENDAMENTO -> CLIENTE, para vendas antigas cujo
+        # IDCliente gravado na própria venda não localiza o nome direto.
+        cur.execute("SELECT IDVendas, IDCliente FROM tblAgendamentos")
+        agendamento_venda_cliente_map = {}
+        for r in cur.fetchall():
+            idv = _num(r[0])
+            if idv:
+                agendamento_venda_cliente_map[idv] = _num(r[1])
+
+        def _resolver_cliente(venda_id_norm, cliente_id_raw):
+            cid = _num(cliente_id_raw)
+            info = cliente_map.get(cid)
+            if info and info["nome"]:
+                return info
+            bruto = str(cliente_id_raw).strip() if cliente_id_raw is not None else ""
+            if bruto and bruto in cliente_raw_map and cliente_raw_map[bruto]["nome"]:
+                return cliente_raw_map[bruto]
+            cid_ag = agendamento_venda_cliente_map.get(venda_id_norm)
+            if cid_ag:
+                info2 = cliente_map.get(cid_ag)
+                if info2 and info2["nome"]:
+                    return info2
+            return {"nome": "", "telefone": "", "contato": ""}
+
+        # Nomes de evento.
+        cur.execute("SELECT IDEvento, NomeEvento FROM tblEvento")
+        evento_nome_map = {access_int(r[0]): str(r[1] or "") for r in cur.fetchall()}
+
+        # Vendas que já possuem pagamento, para excluir da lista de pendentes.
+        cur.execute("SELECT IDVenda FROM tblPagamento")
+        vendas_com_pagamento = {access_int(r[0]) for r in cur.fetchall()}
+
+        cur.execute("""
+            SELECT IDVenda, IDCliente, IDEvento, QtdProvas, ValorFinal,
+                   DataVenda, StatusPagamento
+            FROM tblVendaPacotes
+            ORDER BY IDVenda DESC
+        """)
+
+        eid_filtro = access_int(venda_id) if venda_id else 0
+        termo = search.lower()
+
+        pendentes = []
+        for r in cur.fetchall():
+            id_venda = access_int(r[0])
+
+            if id_venda in vendas_com_pagamento:
+                continue
+            status_pg = str(r[6] or "").strip().lower()
+            if status_pg not in ("", "aberto"):
+                continue
+            if eid_filtro and id_venda != eid_filtro:
+                continue
+
+            cli = _resolver_cliente(id_venda, r[1])
+            evento_nome = evento_nome_map.get(access_int(r[2]), "")
+
+            if not eid_filtro and termo and termo not in (cli["nome"] + " " + evento_nome).lower():
+                continue
+
             pendentes.append({
-                "id":access_int(r[0]), "atleta":str(r[1] or ""),
-                "evento":str(r[2] or ""), "provas":access_int(r[3]),
-                "valor":money(r[4]),
-                "data":r[5].strftime("%d/%m/%Y") if hasattr(r[5],"strftime") else str(r[5] or ""),
-                "telefone":str(r[6] or ""), "contato":str(r[7] or "")
+                "id": id_venda, "atleta": cli["nome"],
+                "evento": evento_nome, "provas": access_int(r[3]),
+                "valor": money(r[4]),
+                "data": _txt(r[5]),
+                "telefone": cli["telefone"], "contato": cli["contato"]
             })
 
         cur.execute("SELECT IDFormaPagamento, FormaPagamento FROM tblFormaPagamento ORDER BY IDFormaPagamento")
