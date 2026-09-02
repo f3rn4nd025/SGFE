@@ -7050,10 +7050,18 @@ def registrar_pagamento():
         if cur.fetchone():
             raise ValueError("Esta venda já possui pagamento registrado.")
 
+        # tblPagamento é uma tabela migrada do Access e IDPagamento não tem
+        # auto-incremento (sequence) configurado no PostgreSQL. Sem isso, o
+        # INSERT tentava gravar o campo vazio e violava a restrição NOT
+        # NULL. Geramos o próximo ID aqui, como já é feito para
+        # tblBalizamentoProvas nesta mesma aplicação.
+        cur.execute("SELECT COALESCE(MAX(IDPagamento::bigint), 0) FROM tblPagamento")
+        proximo_id_pagamento = access_int(cur.fetchone()[0]) + 1
+
         cur.execute("""
-            INSERT INTO tblPagamento (IDVenda, DataPagamento, IDFormaPagamento, Parcelas, ValorPago, Observacoes)
-            VALUES (?, Now(), ?, ?, ?, ?)
-        """,[venda_id,forma_id,parcelas,valor,observacoes])
+            INSERT INTO tblPagamento (IDPagamento, IDVenda, DataPagamento, IDFormaPagamento, Parcelas, ValorPago, Observacoes)
+            VALUES (?, ?, Now(), ?, ?, ?, ?)
+        """,[proximo_id_pagamento,venda_id,forma_id,parcelas,valor,observacoes])
         cur.execute("UPDATE tblVendaPacotes SET StatusPagamento='pago' WHERE IDVenda=?", [venda_id])
         conn.commit()
         cur.execute("SELECT IDEvento FROM tblVendaPacotes WHERE IDVenda=?",[venda_id])
