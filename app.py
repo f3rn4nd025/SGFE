@@ -377,7 +377,13 @@ def aplicar_modal_sgfe(response):
 
         // ENTREGAR: intercepta pelo próprio botão, independentemente de
         // onde o confirm() esteja (onclick/onsubmit/código da tela).
-        if(/^(✓\s*)?ENTREGAR$/.test(texto) || texto.indexOf('ENTREGAR')===0){
+        // EXCEÇÃO: o formulário .entrega-form (tela ENTREGAS) já tem sua
+        // própria confirmação e envio via fetch() para /entregas/<id>/
+        // finalizar. Interceptar aqui também fazia o clique em CONFIRMAR
+        // chamar form.submit() "cru", que NÃO dispara o evento submit do
+        // JavaScript e por isso nunca chegava a registrar a entrega.
+        var dentroDeEntregaForm = !!(el.form && el.form.classList && el.form.classList.contains('entrega-form'));
+        if((/^(✓\s*)?ENTREGAR$/.test(texto) || texto.indexOf('ENTREGAR')===0) && !dentroDeEntregaForm){
           return {el:el,codigo:onclick||'confirm(\"Confirmar que as fotos desta OS\\nforam entregues?\")',entrega:true};
         }
 
