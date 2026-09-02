@@ -2101,6 +2101,11 @@ def login():
                 session["fotografo_nome"] = str(r[1] or "")
                 return redirect(next_url)
         except Exception as e:
+            import traceback
+            print("[SGFE-LOGIN-ERRO]", flush=True)
+            print(f"[SGFE-LOGIN-ERRO] login={login_digitado!r}", flush=True)
+            print(f"[SGFE-LOGIN-ERRO] erro={e}", flush=True)
+            traceback.print_exc()
             erro = "Não foi possível validar o acesso agora."
         finally:
             if conn:
