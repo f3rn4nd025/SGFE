@@ -5740,15 +5740,20 @@ def web_fotografos():
             if cur.fetchone():
                 raise ValueError("Esse login já está cadastrado.")
 
+            # tblFotografos é uma tabela migrada do Access e IDFotografo não
+            # tem auto-incremento (sequence) configurado no PostgreSQL. Sem
+            # isso, o INSERT tentava gravar o campo vazio e violava a
+            # restrição NOT NULL. Geramos o próximo ID aqui, como já é
+            # feito para tblPagamento e tblBalizamentoProvas.
+            cur.execute("SELECT COALESCE(MAX(IDFotografo::bigint), 0) FROM tblFotografos")
+            novo_id_fotografo = access_int(cur.fetchone()[0]) + 1
+
             senha_hash = generate_password_hash(senha)
             cur.execute("""
-                INSERT INTO tblFotografos (Nome, Celular, [Login], SenhaHash, PainelLiberado, DataCadastro)
-                VALUES (?, ?, ?, ?, True, Now())
-            """, [nome, celular, login, senha_hash])
+                INSERT INTO tblFotografos (IDFotografo, Nome, Celular, [Login], SenhaHash, PainelLiberado, DataCadastro)
+                VALUES (?, ?, ?, ?, ?, True, Now())
+            """, [novo_id_fotografo, nome, celular, login, senha_hash])
             conn.commit()
-            # Guarda o ID recém-criado antes de fechar o banco principal.
-            cur.execute("SELECT TOP 1 IDFotografo FROM tblFotografos ORDER BY IDFotografo DESC")
-            novo_id_fotografo = access_int(cur.fetchone()[0])
             # Fecha o banco principal antes de criar a cópia privada, evitando
             # que o arquivo .accdb fique bloqueado pelo ODBC no Windows.
             conn.close()
@@ -5918,6 +5923,54 @@ def fotografo_painel():
 @app.route("/fotografo/logout")
 def fotografo_logout():
     return logout()
+
+
+@app.route("/fotografo/senha", methods=["GET", "POST"])
+def fotografo_alterar_senha():
+    # Autoatendimento: o próprio fotógrafo troca a senha da conta dele,
+    # pedindo a senha atual por segurança. Não depende do perfil ADMIN.
+    id_fotografo = session.get("fotografo_id")
+    if not id_fotografo:
+        return redirect(url_for("login", next="/fotografo/senha"))
+
+    erro = ""
+    mensagem = request.args.get("ok", "")
+
+    if request.method == "POST":
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            senha_atual = request.form.get("senha_atual", "")
+            nova_senha = request.form.get("nova_senha", "")
+            confirmar_senha = request.form.get("confirmar_senha", "")
+
+            if not senha_atual or not nova_senha or not confirmar_senha:
+                raise ValueError("Preencha a senha atual e a nova senha (com confirmação).")
+            if len(nova_senha) < 4:
+                raise ValueError("A nova senha precisa ter pelo menos 4 caracteres.")
+            if nova_senha != confirmar_senha:
+                raise ValueError("A confirmação não bate com a nova senha.")
+
+            cur.execute("SELECT SenhaHash FROM tblFotografos WHERE IDFotografo=?", [id_fotografo])
+            r = cur.fetchone()
+            if not r:
+                raise ValueError("Fotógrafo não encontrado.")
+
+            if not check_password_hash(str(r[0] or ""), senha_atual):
+                raise ValueError("Senha atual incorreta.")
+
+            nova_senha_hash = generate_password_hash(nova_senha)
+            cur.execute("UPDATE tblFotografos SET SenhaHash=? WHERE IDFotografo=?", [nova_senha_hash, id_fotografo])
+            conn.commit()
+            return redirect(url_for("fotografo_alterar_senha", ok="Senha alterada com sucesso."))
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            erro = str(e)
+        finally:
+            conn.close()
+
+    return render_template("fotografo_senha.html", erro=erro, mensagem=mensagem)
 
 
 @app.route("/equipes", methods=["GET", "POST"])
