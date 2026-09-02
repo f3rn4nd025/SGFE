@@ -6747,6 +6747,15 @@ def web_entregas():
                 if id_evento != evento_selecionado:
                     continue
 
+                # Exclui OS CANCELADA (mesmo critério já usado nas telas
+                # VENDAS e PAGAMENTOS). Esta tela buscava os nomes de
+                # status mas nunca chegava a usá-los para filtrar, então
+                # uma OS cancelada continuava aparecendo como pendente.
+                status_venda_nome = status_map.get(access_int(r[9]), "")
+                status_pagamento_bruto = str(r[8] or "").strip().lower()
+                if "CANCEL" in status_venda_nome.upper() or status_pagamento_bruto == "cancelado":
+                    continue
+
                 atleta, cliente_id = _resolver_cliente_ent(id_cliente_raw)
                 telefone = ""
                 contato = ""
