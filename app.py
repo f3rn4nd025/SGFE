@@ -515,6 +515,24 @@ def aplicar_modal_sgfe(response):
             css_pagamentos_fonte = "<style id='sgfe-pagamentos-fonte-normal'>table tbody td, table tbody td * { font-weight: 400 !important; }</style>"
             html = html[:pos] + css_pagamentos_fonte + html[pos:]
 
+        # DESPESAS: o botão FILTRAR é um <button>, enquanto MENU PRINCIPAL/
+        # VOLTAR/LIMPAR são links <a class="nav-btn"> que já recebem o
+        # estilo certo do style.css. Como esse CSS parece valer só para
+        # <a>, o <button class="nav-btn"> ficava com a aparência padrão
+        # (branca) do navegador. Isso só ajusta a aparência deste botão
+        # específico, sem alterar filtro, consultas, rotas ou ação.
+        if request.path == '/despesas':
+            css_despesas_botao = (
+                "<style id='sgfe-despesas-botao-filtrar'>"
+                ".expense-filter button.nav-btn{"
+                "background:#0b5b5e;color:#fff;border:1px solid #12d8de;"
+                "border-radius:8px;padding:11px 16px;font-weight:900;"
+                "cursor:pointer;}"
+                ".expense-filter button.nav-btn:hover{filter:brightness(1.08);}"
+                "</style>"
+            )
+            html = html[:pos] + css_despesas_botao + html[pos:]
+
         response.set_data(html)
         return response
     except Exception:
