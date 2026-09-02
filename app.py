@@ -6159,7 +6159,15 @@ def web_eventos():
         sql += " ORDER BY E.DataEvento DESC, E.IDEvento DESC"
 
         cur.execute(sql,params)
-        columns=[d[0] for d in cur.description]
+        # O PostgreSQL sempre devolve os nomes das colunas em minúsculo,
+        # mesmo com a consulta escrita em maiúsculas. Usar esses nomes
+        # (via cur.description) para montar cada linha, enquanto o
+        # template recebe a lista abaixo em maiúsculas, fazia a busca
+        # item["IDEvento"] não encontrar item["idevento"] — resultando em
+        # células vazias mesmo com os registros existindo. Aqui usamos
+        # diretamente a mesma lista (na mesma ordem do SELECT) para as duas
+        # coisas.
+        columns=["IDEvento","NomeEvento","DataEvento","Cidade","Modalidade","Ativo"]
         data=[]
         for row in cur.fetchall():
             item={}
