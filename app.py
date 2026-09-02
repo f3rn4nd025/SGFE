@@ -1428,6 +1428,26 @@ def money(value):
         return 0.0
 
 
+def _status_venda_id_por_nome(cur, *nomes_candidatos):
+    """
+    Procura em tblStatusVenda um status cujo nome bata (sem diferenciar
+    maiúsculas/minúsculas) com algum dos nomes candidatos, na ordem dada,
+    e devolve o IDStatusVenda já normalizado. Usada para manter
+    IDStatusVenda (campo que a tela VENDAS exibe) sincronizado com
+    StatusPagamento (campo que Pagamentos/Entregas/Histórico usam) sempre
+    que um dos dois é alterado. Devolve None se nenhum nome candidato foi
+    encontrado na tabela.
+    """
+    cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
+    por_nome = {}
+    for r in cur.fetchall():
+        por_nome.setdefault(str(r[1] or "").strip().upper(), access_int(r[0]))
+    for nome in nomes_candidatos:
+        if nome.strip().upper() in por_nome:
+            return por_nome[nome.strip().upper()]
+    return None
+
+
 # =========================================================
 # BALIZAMENTO - MARCAÇÃO FOTOGRÁFICA
 # =========================================================
@@ -4500,6 +4520,31 @@ def web_vendas():
         cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
         status_map = {_num_status(r[0]): _txt(r[1]) for r in cur.fetchall()}
 
+        # A tela VENDAS mostrava o status a partir de um campo manual
+        # (IDStatusVenda), separado do valor realmente pago (tblPagamento).
+        # Isso desincronizava sempre que um pagamento era registrado por
+        # outra tela (Pagamentos/Entregas) sem que alguém lembrasse de
+        # também atualizar esse campo manual. Agora PAGA/PARCIAL/ABERTA são
+        # calculados a partir do valor pago de verdade — só CANCELADA e
+        # CORTESIA continuam vindo do campo manual, pois não dá pra
+        # calculá-los só com base no valor.
+        cur.execute("SELECT IDVenda, Sum(ValorPago) FROM tblPagamento GROUP BY IDVenda")
+        pagamentos_map = {}
+        for r2 in cur.fetchall():
+            try:
+                pagamentos_map[_num(r2[0])] = float(r2[1] or 0)
+            except Exception:
+                pass
+
+        nomes_status_existentes = {}
+        for _v in status_map.values():
+            nomes_status_existentes.setdefault(_v.strip().upper(), _v)
+        nome_status_paga = nomes_status_existentes.get("PAGA") or nomes_status_existentes.get("PAGO") or "Paga"
+        nome_status_parcial = nomes_status_existentes.get("PARCIAL") or "Parcial"
+        nome_status_aberta = nomes_status_existentes.get("ABERTA") or "Aberta"
+        nome_status_cancelada = nomes_status_existentes.get("CANCELADA") or "Cancelada"
+        nome_status_cortesia = nomes_status_existentes.get("CORTESIA") or "Cortesia"
+
         # A venda é lida diretamente, sem JOIN por IDs e SEM WHERE IDEvento.
         # Esta é a mesma estratégia usada pela tela ENTREGAS, que já está
         # funcionando corretamente. No PostgreSQL, IDEvento é character varying
@@ -4518,7 +4563,8 @@ def web_vendas():
                 IDStatusVenda,
                 IDAgendamento,
                 Finalizado,
-                DataFinalizacao
+                DataFinalizacao,
+                StatusPagamento
             FROM tblVendaPacotes
             ORDER BY IDVenda DESC
         """)
@@ -4652,13 +4698,30 @@ def web_vendas():
                 print(f"[SGFE-VENDAS] atleta_nao_localizado venda={venda_id} IDCliente={r[2]!r} IDAgendamento={r[9]!r}")
 
             evento_nome = evento_map.get(evento_id, {}).get("nome", "")
-            status_nome = status_map.get(status_id, "")
 
             qtd = _num(r[4])
             valor_pacote = r[5] if r[5] is not None else 0
             valor_desconto = r[6] if r[6] is not None else 0
             valor_final = r[7] if r[7] is not None else 0
             finalizado = r[10]
+
+            status_bruto = status_map.get(status_id, "")
+            status_bruto_upper = status_bruto.strip().upper()
+            status_pagamento_bruto = str(r[12] or "").strip().lower()
+
+            if "CANCEL" in status_bruto_upper or status_pagamento_bruto == "cancelado":
+                status_nome = status_bruto if "CANCEL" in status_bruto_upper else nome_status_cancelada
+            elif "CORTESIA" in status_bruto_upper or status_pagamento_bruto == "cortesia":
+                status_nome = status_bruto if "CORTESIA" in status_bruto_upper else nome_status_cortesia
+            else:
+                pago = pagamentos_map.get(venda_id, 0.0)
+                valor_num = float(valor_final or 0)
+                if valor_num > 0 and pago >= valor_num - 0.009:
+                    status_nome = nome_status_paga
+                elif pago > 0:
+                    status_nome = nome_status_parcial
+                else:
+                    status_nome = nome_status_aberta
 
             # Aliases em maiúsculo e minúsculo para manter compatibilidade
             # com o template atual, sem alterar o template nem outras telas.
@@ -7203,7 +7266,27 @@ def registrar_pagamento():
             INSERT INTO tblPagamento (IDPagamento, IDVenda, DataPagamento, IDFormaPagamento, Parcelas, ValorPago, Observacoes)
             VALUES (?, ?, Now(), ?, ?, ?, ?)
         """,[proximo_id_pagamento,venda_id,forma_id,parcelas,valor,observacoes])
-        cur.execute("UPDATE tblVendaPacotes SET StatusPagamento='pago' WHERE IDVenda=?", [venda_id])
+
+        # A tela VENDAS mostra o status a partir de IDStatusVenda (ex.:
+        # "Aberta"/"Paga"), um campo separado do StatusPagamento usado
+        # pelas telas Pagamentos/Entregas. Sem atualizar os dois juntos,
+        # a venda ficava com StatusPagamento='pago' mas continuava
+        # aparecendo como "ABERTA" na tela Vendas.
+        cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
+        status_paga_id = None
+        for r in cur.fetchall():
+            nome = str(r[1] or "").strip().upper()
+            if nome in ("PAGA", "PAGO"):
+                status_paga_id = access_int(r[0])
+                break
+
+        if status_paga_id is not None:
+            cur.execute(
+                "UPDATE tblVendaPacotes SET StatusPagamento='pago', IDStatusVenda=? WHERE IDVenda=?",
+                [status_paga_id, venda_id]
+            )
+        else:
+            cur.execute("UPDATE tblVendaPacotes SET StatusPagamento='pago' WHERE IDVenda=?", [venda_id])
         conn.commit()
         cur.execute("SELECT IDEvento FROM tblVendaPacotes WHERE IDVenda=?",[venda_id])
         r=cur.fetchone(); eid=access_int(r[0]) if r else 0
@@ -7276,7 +7359,23 @@ def alterar_status_pagamento():
             cur.execute("SELECT IDPagamento FROM tblPagamento WHERE IDVenda=?", [venda_id])
             if not cur.fetchone():
                 raise ValueError("Para marcar como PAGO, registre primeiro o pagamento.")
-        cur.execute("UPDATE tblVendaPacotes SET StatusPagamento=? WHERE IDVenda=?", [status, venda_id])
+
+        # Mantém IDStatusVenda (campo que a tela VENDAS exibe) sincronizado
+        # com StatusPagamento (campo que esta tela usa), para os dois lados
+        # nunca ficarem desencontrados.
+        nomes_por_status = {
+            "pago": ("PAGA", "PAGO"),
+            "cortesia": ("CORTESIA",),
+            "aberto": ("ABERTA",),
+        }
+        status_venda_id = _status_venda_id_por_nome(cur, *nomes_por_status.get(status, ()))
+        if status_venda_id is not None:
+            cur.execute(
+                "UPDATE tblVendaPacotes SET StatusPagamento=?, IDStatusVenda=? WHERE IDVenda=?",
+                [status, status_venda_id, venda_id]
+            )
+        else:
+            cur.execute("UPDATE tblVendaPacotes SET StatusPagamento=? WHERE IDVenda=?", [status, venda_id])
         conn.commit()
         eid = access_int(row[0])
         return redirect(url_for("web_pagamentos", evento=eid, ok="Status de pagamento atualizado."))
