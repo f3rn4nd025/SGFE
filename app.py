@@ -379,7 +379,17 @@ def aplicar_modal_sgfe(response):
     return false;
   }
 
-  function encontrarAlvoConfirmavel(el){
+  function encontrarAlvoConfirmavel(elClicado){
+    // ENTREGAR: a exceção do formulário .entrega-form (tela ENTREGAS) é
+    // calculada UMA VEZ, a partir do elemento realmente clicado, e vale
+    // para toda a subida na árvore. Calculá-la de novo a cada nível não
+    // funciona: assim que a subida passa do próprio <form> (indo para a
+    // div/célula/linha ao redor), o formulário passa a ser descendente,
+    // não mais ancestral, e a checagem por ancestralidade deixa de
+    // enxergá-lo — voltando a interceptar nos níveis mais externos.
+    var dentroDeEntregaForm = !!(elClicado.closest && elClicado.closest('form.entrega-form'));
+
+    var el = elClicado;
     while(el && el!==document.body){
       if(el.nodeType===1){
         var onclick=el.getAttribute('onclick')||'';
@@ -392,7 +402,6 @@ def aplicar_modal_sgfe(response):
         // finalizar. Interceptar aqui também fazia o clique em CONFIRMAR
         // chamar form.submit() "cru", que NÃO dispara o evento submit do
         // JavaScript e por isso nunca chegava a registrar a entrega.
-        var dentroDeEntregaForm = !!(el.closest && el.closest('form.entrega-form'));
         if((/^(✓\s*)?ENTREGAR$/.test(texto) || texto.indexOf('ENTREGAR')===0) && !dentroDeEntregaForm){
           return {el:el,codigo:onclick||'confirm(\"Confirmar que as fotos desta OS\\nforam entregues?\")',entrega:true};
         }
