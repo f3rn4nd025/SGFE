@@ -7562,41 +7562,142 @@ def web_historico():
             ORDER BY DataEvento DESC, NomeEvento
         """)
         eventos = []
+        evento_map = {}
         for r in cur.fetchall():
-            eventos.append({
-                "id": access_int(r[0]),
+            eid = access_int(r[0])
+            info = {
+                "id": eid,
                 "nome": str(r[1] or ""),
                 "data": r[2].strftime("%d/%m/%Y") if hasattr(r[2], "strftime") else str(r[2] or ""),
                 "cidade": str(r[3] or "")
-            })
+            }
+            eventos.append(info)
+            evento_map[eid] = info
+
+        # IMPORTANTE: NÃO fazer JOIN direto entre tblVendaPacotes e
+        # tblClientes/tblEvento/tblStatusVenda aqui. Mesmo problema de
+        # tipos (varchar x bigint/integer, herança da migração do Access)
+        # já visto e corrigido nas telas VENDAS, PAGAMENTOS, PAGAMENTOS
+        # PENDENTES e ENTREGAS. Cada tabela é lida separadamente e cruzada
+        # em Python.
+
+        def _num(v):
+            """Normaliza IDs migrados do Access (idêntica à usada nas
+            telas VENDAS/PAGAMENTOS para cliente/evento/venda)."""
+            if v is None:
+                return 0
+            if isinstance(v, memoryview):
+                v = v.tobytes()
+            if isinstance(v, (bytes, bytearray)):
+                raw = bytes(v).rstrip(b"\x00")
+                if not raw:
+                    return 0
+                try:
+                    txt = raw.decode("ascii").strip()
+                    if txt.isdigit():
+                        return int(txt)
+                    if txt.lower().startswith("\\x"):
+                        hx = txt[2:]
+                        if hx and len(hx) % 2 == 0:
+                            return int.from_bytes(bytes.fromhex(hx), "little", signed=False)
+                except Exception:
+                    pass
+                return int.from_bytes(raw, byteorder="little", signed=False)
+            if isinstance(v, str):
+                if len(v) == 1:
+                    return ord(v)
+                s = v.strip()
+                if not s:
+                    return 0
+                try:
+                    return int(s)
+                except Exception:
+                    pass
+                if s.lower().startswith("\\x"):
+                    try:
+                        hx = s[2:]
+                        if hx and len(hx) % 2 == 0:
+                            return int.from_bytes(bytes.fromhex(hx), "little", signed=False)
+                    except Exception:
+                        pass
+                try:
+                    raw = s.encode("latin1").rstrip(b"\x00")
+                    if raw:
+                        return int.from_bytes(raw, byteorder="little", signed=False)
+                except Exception:
+                    pass
+                return 0
+            try:
+                return int(v)
+            except Exception:
+                return 0
+
+        def _txt(v):
+            if v is None:
+                return ""
+            if hasattr(v, "strftime"):
+                return v.strftime("%d/%m/%Y")
+            return str(v)
+
+        # Clientes (nome/telefone/contato).
+        cur.execute("SELECT IDCliente, Nome, Telefone, Contato FROM tblClientes")
+        cliente_map = {}
+        cliente_raw_map = {}
+        for r in cur.fetchall():
+            info = {"nome": _txt(r[1]), "telefone": _txt(r[2]), "contato": _txt(r[3])}
+            n = _num(r[0])
+            if n:
+                cliente_map[n] = info
+            bruto = str(r[0]).strip() if r[0] is not None else ""
+            if bruto:
+                cliente_raw_map[bruto] = info
+
+        # Vínculo VENDA -> AGENDAMENTO -> CLIENTE para vendas antigas cujo
+        # IDCliente gravado na própria venda não localiza o nome direto.
+        cur.execute("SELECT IDVendas, IDCliente FROM tblAgendamentos")
+        agendamento_venda_cliente_map = {}
+        for r in cur.fetchall():
+            idv = _num(r[0])
+            if idv:
+                agendamento_venda_cliente_map[idv] = _num(r[1])
+
+        def _resolver_cliente(venda_id_norm, cliente_id_raw):
+            cid = _num(cliente_id_raw)
+            info = cliente_map.get(cid)
+            if info and info["nome"]:
+                return info
+            bruto = str(cliente_id_raw).strip() if cliente_id_raw is not None else ""
+            if bruto and bruto in cliente_raw_map and cliente_raw_map[bruto]["nome"]:
+                return cliente_raw_map[bruto]
+            cid_ag = agendamento_venda_cliente_map.get(venda_id_norm)
+            if cid_ag:
+                info2 = cliente_map.get(cid_ag)
+                if info2 and info2["nome"]:
+                    return info2
+            return {"nome": "", "telefone": "", "contato": ""}
+
+        # Nomes de status (para excluir OS CANCELADA, mesmo critério das
+        # demais telas).
+        cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
+        status_nome_map = {access_int(r[0]): str(r[1] or "") for r in cur.fetchall()}
 
         # Todas as vendas/OS. O histórico não deve esconder uma OS por estar
         # finalizada ou paga: ele é justamente a memória do sistema.
-        sql = """
-            SELECT V.IDVenda, V.DataVenda, V.IDCliente, C.Nome AS Atleta,
-                   C.Telefone, C.Contato, V.IDEvento, E.NomeEvento AS Evento,
-                   E.DataEvento, E.Cidade, V.QtdProvas, V.ValorPacote,
-                   V.ValorDesconto, V.ValorFinal, S.StatusVenda AS Status,
-                   V.Finalizado, V.DataFinalizacao, V.StatusPagamento
-            FROM ((tblVendaPacotes AS V
-            LEFT JOIN tblClientes AS C ON V.IDCliente=C.IDCliente)
-            LEFT JOIN tblEvento AS E ON V.IDEvento=E.IDEvento)
-            LEFT JOIN tblStatusVenda AS S ON V.IDStatusVenda=S.IDStatusVenda
-        """
-        params = []
-        where = []
-        if evento_id:
-            where.append("V.IDEvento=?")
-            params.append(access_int(evento_id))
-        if search:
-            where.append("(C.Nome LIKE ? OR E.NomeEvento LIKE ? OR C.Telefone LIKE ? OR C.Contato LIKE ?)")
-            like = "%" + search + "%"
-            params.extend([like, like, like, like])
-        if where:
-            sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY V.DataVenda DESC, V.IDVenda DESC"
-        cur.execute(sql, params)
-        vendas = cur.fetchall()
+        cur.execute("""
+            SELECT IDVenda, DataVenda, IDCliente, IDEvento, QtdProvas,
+                   ValorPacote, ValorDesconto, ValorFinal, IDStatusVenda,
+                   Finalizado, DataFinalizacao, StatusPagamento, IDAgendamento
+            FROM tblVendaPacotes
+            ORDER BY DataVenda DESC, IDVenda DESC
+        """)
+        vendas_brutas = cur.fetchall()
+
+        eid_filtro = access_int(evento_id) if evento_id else 0
+        vendas_evento = []
+        for r in vendas_brutas:
+            if eid_filtro and access_int(r[3]) != eid_filtro:
+                continue
+            vendas_evento.append(r)
 
         # Soma de pagamentos por OS. Isso deixa o histórico correto mesmo que
         # uma OS venha a ter mais de um lançamento de pagamento no futuro.
@@ -7612,14 +7713,21 @@ def web_historico():
             except Exception:
                 pass
 
-        data = []
-        for r in vendas:
+        termo = search.lower()
+        resolved_rows = []
+        for r in vendas_evento:
             id_venda = access_int(r[0])
-            valor = float(r[13] or 0)
-            status_registrado = str(r[17] or "aberto").strip().lower()
-            status_venda_registrado = str(r[14] or "").strip().lower()
+            cli = _resolver_cliente(id_venda, r[2])
+            evento_id_norm = access_int(r[3])
+            evento_info = evento_map.get(evento_id_norm, {})
+            valor = float(r[7] or 0)
+            status_venda_nome = status_nome_map.get(access_int(r[8]), "")
+            status_venda_lower = status_venda_nome.strip().lower()
+            status_registrado = str(r[11] or "aberto").strip().lower()
             recebido = pagos.get(id_venda, 0.0)
-            if "cancel" in status_venda_registrado or status_registrado == "cancelado":
+            cancelado = "cancel" in status_venda_lower or status_registrado == "cancelado"
+
+            if cancelado:
                 recebido = 0.0
                 aberto = 0.0
                 situacao_pagamento = "cancelado"
@@ -7637,60 +7745,63 @@ def web_historico():
                 aberto = max(valor - recebido, 0.0)
                 situacao_pagamento = "parcial"
 
-            if status_filtro != "todos" and situacao_pagamento != status_filtro:
-                continue
-
-            item = {
+            resolved_rows.append({
                 "id": id_venda,
-                "data_venda": r[1].strftime("%d/%m/%Y") if hasattr(r[1], "strftime") else str(r[1] or ""),
-                "cliente_id": access_int(r[2]),
-                "atleta": str(r[3] or ""),
-                "telefone": str(r[4] or ""),
-                "contato": str(r[5] or ""),
-                "evento_id": access_int(r[6]),
-                "evento": str(r[7] or ""),
-                "data_evento": r[8].strftime("%d/%m/%Y") if hasattr(r[8], "strftime") else str(r[8] or ""),
-                "cidade": str(r[9] or ""),
-                "provas": access_int(r[10]),
-                "pacote": float(r[11] or 0),
-                "desconto": float(r[12] or 0),
+                "data_venda": _txt(r[1]),
+                "cliente_id": _num(r[2]),
+                "atleta": cli["nome"],
+                "telefone": cli["telefone"],
+                "contato": cli["contato"],
+                "evento_id": evento_id_norm,
+                "evento": evento_info.get("nome", ""),
+                "data_evento": evento_info.get("data", ""),
+                "cidade": evento_info.get("cidade", ""),
+                "provas": access_int(r[4]),
+                "pacote": float(r[5] or 0),
+                "desconto": float(r[6] or 0),
                 "valor": valor,
-                "status": str(r[14] or ""),
-                "entregue": bool(r[15]) if r[15] is not None else False,
-                "data_entrega": r[16].strftime("%d/%m/%Y") if hasattr(r[16], "strftime") else str(r[16] or ""),
+                "status": status_venda_nome,
+                "entregue": bool(r[9]) if r[9] is not None else False,
+                "data_entrega": _txt(r[10]),
                 "recebido": recebido,
                 "aberto": aberto,
                 "situacao_pagamento": situacao_pagamento,
                 "status_pagamento": status_registrado,
-            }
+                "cancelado": cancelado,
+            })
+
+        data = []
+        for item in resolved_rows:
+            if status_filtro != "todos" and item["situacao_pagamento"] != status_filtro:
+                continue
+            if termo and termo not in (
+                item["atleta"] + " " + item["evento"] + " " +
+                item["telefone"] + " " + item["contato"]
+            ).lower():
+                continue
             data.append(item)
 
         # Resumo respeitando o evento selecionado, mas mostrando a realidade
         # completa das OS daquele filtro, independente do filtro de situação.
-        vendas_validas = [
-            r for r in vendas
-            if "cancel" not in str(r[14] or "").strip().lower()
-            and str(r[17] or "aberto").strip().lower() != "cancelado"
-        ]
-        resumo_vendido = sum(float((r[13] or 0)) for r in vendas_validas)
-        resumo_recebido = sum(pagos.get(access_int(r[0]), 0.0) for r in vendas_validas)
+        vendas_validas = [item for item in resolved_rows if not item["cancelado"]]
+        resumo_vendido = sum(item["valor"] for item in vendas_validas)
+        resumo_recebido = sum(pagos.get(item["id"], 0.0) for item in vendas_validas)
         resumo_aberto = sum(
-            (0.0 if str(r[17] or "aberto").strip().lower() == "cortesia"
-             else max(float(r[13] or 0) - pagos.get(access_int(r[0]), 0.0), 0.0))
-            for r in vendas_validas
+            (0.0 if item["status_pagamento"] == "cortesia"
+             else max(item["valor"] - pagos.get(item["id"], 0.0), 0.0))
+            for item in vendas_validas
         )
-        resumo_entregues = sum(1 for r in vendas_validas if bool(r[15]))
+        resumo_entregues = sum(1 for item in vendas_validas if item["entregue"])
         resumo_pagos = sum(
-            1 for r in vendas_validas
-            if pagos.get(access_int(r[0]), 0.0) >= float(r[13] or 0) - 0.009
+            1 for item in vendas_validas
+            if pagos.get(item["id"], 0.0) >= item["valor"] - 0.009
         )
         resumo_abertos = sum(
-            1 for r in vendas_validas
-            if pagos.get(access_int(r[0]), 0.0) <= 0.009
+            1 for item in vendas_validas
+            if pagos.get(item["id"], 0.0) <= 0.009
         )
         resumo_cortesias = sum(
-            1 for r in vendas_validas
-            if str(r[17] or "aberto").strip().lower() == "cortesia"
+            1 for item in vendas_validas if item["status_pagamento"] == "cortesia"
         )
         resumo_parciais = max(
             len(vendas_validas) - resumo_pagos - resumo_abertos - resumo_cortesias, 0
@@ -7707,7 +7818,7 @@ def web_historico():
         data=data, search=search, status_filtro=status_filtro,
         mensagem=mensagem, erro=erro,
         resumo={
-            "os": len(vendas),
+            "os": len(resolved_rows),
             "vendido": resumo_vendido,
             "recebido": resumo_recebido,
             "aberto": resumo_aberto,
