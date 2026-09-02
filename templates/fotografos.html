@@ -2,16 +2,15 @@
 <style>
 .fp{max-width:1120px;margin:36px auto;padding:0 24px}
 .fp .page-actions{margin-bottom:22px}
-.fp-head{margin-bottom:28px}
+.fp-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:28px;flex-wrap:wrap}
 .fp-eyebrow{font-size:11px;font-weight:900;letter-spacing:1.5px;color:#12d8de;margin-bottom:8px}
 .fp h1{margin:0;font-size:32px;color:#fff}
 .fp .sub{color:#819596;margin:10px 0 0;font-size:14px;max-width:560px;line-height:1.5}
 
-.fpgrid{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start}
-
 .card{background:linear-gradient(150deg,#081415,#050b0c);border:1px solid #123f41;border-radius:16px;padding:24px;box-shadow:0 10px 34px rgba(0,0,0,.32)}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px;flex-wrap:wrap}
 .card h2{margin:0 0 4px;font-size:17px;color:#fff}
-.card .card-sub{margin:0 0 20px;font-size:12px;color:#6f8a8c}
+.card .card-sub{margin:0;font-size:12px;color:#6f8a8c}
 
 .field{margin-bottom:16px}
 .field label{display:block;font-size:10.5px;font-weight:900;letter-spacing:.6px;margin-bottom:7px;color:#96abac}
@@ -23,6 +22,7 @@
 .btn:hover{filter:brightness(1.1)}
 .btn:active{transform:scale(.98)}
 .btn-submit{width:100%;padding:13px 16px;margin-top:4px;background:linear-gradient(135deg,#1cb868,#0e7a44);border-color:#27d873}
+.btn-novo{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;background:linear-gradient(135deg,#1cb868,#0e7a44);border-color:#27d873}
 
 .btn-edit{border-color:#1c5a5d;background:#0b3439;color:#7fe9ef;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .btn-edit:hover{background:#0d4247;filter:none}
@@ -30,37 +30,48 @@
 .btn-block:hover{background:#3a161a;filter:none}
 .btn-release{border-color:#1a8c61;background:#0d3a29;color:#5fe8b0}
 .btn-release:hover{background:#0f4a34;filter:none}
+.btn-cancel{background:#172526;border-color:#31585a;color:#cfe4e5}
 
 .msg{padding:13px 15px;border-radius:10px;background:#0b3029;border:1px solid #1a8c61;color:#a9ffe0;margin-bottom:18px;font-size:13px}
 .err{padding:13px 15px;border-radius:10px;background:#351619;border:1px solid #8e3138;color:#ffb4b7;margin-bottom:18px;font-size:13px}
 
 .tbl-wrap{overflow-x:auto;border:1px solid #123f41;border-radius:12px}
-.tbl{width:100%;border-collapse:collapse;min-width:560px}
+.tbl{width:100%;border-collapse:collapse;min-width:640px}
 .tbl th{text-align:left;padding:13px 14px;font-size:10.5px;font-weight:900;letter-spacing:.5px;color:#7fa0a2;background:#081617;border-bottom:1px solid #123f41;white-space:nowrap}
 .tbl td{text-align:left;padding:14px;border-bottom:1px solid #0f2c2e;font-size:13px;color:#dceeee;vertical-align:middle}
 .tbl tbody tr{transition:background .12s}
 .tbl tbody tr:hover td{background:#081819}
 .tbl tbody tr:last-child td{border-bottom:0}
-.tbl .nome-cel{font-weight:700;color:#fff}
-.tbl .celular{color:#9fb6b7}
+.tbl .nome-cel{font-weight:700;color:#fff;white-space:nowrap}
+.tbl .celular{color:#9fb6b7;white-space:nowrap}
+.tbl .acao-col{white-space:nowrap}
 
-.status{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:10.5px;font-weight:900;letter-spacing:.4px}
+.status{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:10.5px;font-weight:900;letter-spacing:.4px;white-space:nowrap}
 .status.ok{background:rgba(24,216,222,.12);color:#4fe6ec;border:1px solid rgba(24,216,222,.35)}
 .status.ok::before{content:"";width:6px;height:6px;border-radius:50%;background:#18d8de}
 .status.no{background:rgba(255,110,118,.1);color:#ff9096;border:1px solid rgba(255,110,118,.32)}
 .status.no::before{content:"";width:6px;height:6px;border-radius:50%;background:#ff6e76}
 
 .action-form{margin:0}
-.actions-cell{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.actions-cell{display:flex;gap:8px;align-items:center;flex-wrap:nowrap}
 
 .empty-state{text-align:center;padding:44px 20px;color:#5e7879}
 .empty-state .icon{font-size:26px;margin-bottom:10px;opacity:.6}
 .empty-state p{margin:0;font-size:13px}
 
+/* Modal de cadastro */
+.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+.modal-backdrop.show{display:flex}
+.modal-box{width:min(420px,100%);background:linear-gradient(150deg,#0b1718,#050b0c);border:1px solid #176568;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.55);padding:26px}
+.modal-box h2{margin:0 0 4px;font-size:18px;color:#fff}
+.modal-box .card-sub{margin-bottom:20px}
+.modal-actions{display:flex;gap:10px;margin-top:6px}
+.modal-actions .btn{flex:1}
+
 @media(max-width:850px){
-  .fpgrid{grid-template-columns:1fr}
   .fp{margin:24px auto;padding:0 16px}
   .fp h1{font-size:26px}
+  .fp-head{align-items:flex-start}
 }
 </style>
 </head><body>
@@ -68,68 +79,103 @@
   <div class="page-actions"><a class="nav-btn" href="/configuracoes">← VOLTAR</a></div>
 
   <div class="fp-head">
-    <div class="fp-eyebrow">CONFIGURAÇÕES</div>
-    <h1>Fotógrafos</h1>
-    <p class="sub">Cadastro e controle de acesso aos painéis dos fotógrafos.</p>
+    <div>
+      <div class="fp-eyebrow">CONFIGURAÇÕES</div>
+      <h1>Fotógrafos</h1>
+      <p class="sub">Cadastro e controle de acesso aos painéis dos fotógrafos.</p>
+    </div>
+    <button class="btn btn-novo" type="button" onclick="abrirCadastroFotografo()">+ CADASTRAR FOTÓGRAFO</button>
   </div>
 
   {% if mensagem %}<div class="msg">{{ mensagem }}</div>{% endif %}
   {% if erro %}<div class="err">{{ erro }}</div>{% endif %}
 
-  <div class="fpgrid">
-    <div class="card">
-      <h2>Novo fotógrafo</h2>
-      <p class="card-sub">Preencha os dados para liberar o acesso.</p>
-      <form method="post">
-        <div class="field"><label>NOME</label><input name="nome" placeholder="Nome completo" required></div>
-        <div class="field"><label>CELULAR</label><input name="celular" placeholder="(00) 00000-0000" required></div>
-        <div class="field"><label>LOGIN</label><input name="login" placeholder="usuario.login" required autocomplete="off"></div>
-        <div class="field"><label>SENHA</label><input name="senha" type="password" placeholder="••••••••" required autocomplete="new-password"></div>
-        <button class="btn btn-submit" type="submit">CADASTRAR FOTÓGRAFO</button>
-      </form>
+  <div class="card">
+    <div class="card-top">
+      <div>
+        <h2>Fotógrafos cadastrados</h2>
+        <p class="card-sub">{{ fotografos|length if fotografos else 0 }} fotógrafo(s) com acesso ao sistema.</p>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Fotógrafos cadastrados</h2>
-      <p class="card-sub">{{ fotografos|length if fotografos else 0 }} fotógrafo(s) com acesso ao sistema.</p>
-
-      {% if fotografos %}
-      <div class="tbl-wrap">
-        <table class="tbl">
-          <thead><tr><th>NOME</th><th>CELULAR</th><th>LOGIN</th><th>STATUS DO PAINEL</th><th>AÇÃO</th></tr></thead>
-          <tbody>
-            {% for f in fotografos %}
-            <tr>
-              <td class="nome-cel">{{ f.nome }}</td>
-              <td class="celular">{{ f.celular }}</td>
-              <td>{{ f.login }}</td>
-              <td><span class="status {{ 'ok' if f.liberado else 'no' }}">{{ 'LIBERADO' if f.liberado else 'BLOQUEADO' }}</span></td>
-              <td>
-                <div class="actions-cell">
-                  <a class="btn btn-edit" href="{{ url_for('editar_fotografo', id_fotografo=f.id) }}">✏️ EDITAR</a>
-                  {% if f.liberado %}
-                  <form class="action-form" method="post" action="{{ url_for('bloquear_fotografo', id_fotografo=f.id) }}" onsubmit="return confirm('Bloquear o painel deste fotógrafo?');">
-                    <button class="btn btn-block" type="submit">🔒 BLOQUEAR PAINEL</button>
-                  </form>
-                  {% else %}
-                  <form class="action-form" method="post" action="{{ url_for('liberar_fotografo', id_fotografo=f.id) }}">
-                    <button class="btn btn-release" type="submit">🔓 LIBERAR PAINEL</button>
-                  </form>
-                  {% endif %}
-                </div>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="empty-state">
-        <div class="icon">📷</div>
-        <p>Nenhum fotógrafo cadastrado ainda.</p>
-      </div>
-      {% endif %}
+    {% if fotografos %}
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>NOME</th><th>CELULAR</th><th>LOGIN</th><th>STATUS DO PAINEL</th><th>AÇÃO</th></tr></thead>
+        <tbody>
+          {% for f in fotografos %}
+          <tr>
+            <td class="nome-cel">{{ f.nome }}</td>
+            <td class="celular">{{ f.celular }}</td>
+            <td>{{ f.login }}</td>
+            <td><span class="status {{ 'ok' if f.liberado else 'no' }}">{{ 'LIBERADO' if f.liberado else 'BLOQUEADO' }}</span></td>
+            <td class="acao-col">
+              <div class="actions-cell">
+                <a class="btn btn-edit" href="{{ url_for('editar_fotografo', id_fotografo=f.id) }}">✏️ EDITAR</a>
+                {% if f.liberado %}
+                <form class="action-form" method="post" action="{{ url_for('bloquear_fotografo', id_fotografo=f.id) }}" onsubmit="return confirm('Bloquear o painel deste fotógrafo?');">
+                  <button class="btn btn-block" type="submit">🔒 BLOQUEAR PAINEL</button>
+                </form>
+                {% else %}
+                <form class="action-form" method="post" action="{{ url_for('liberar_fotografo', id_fotografo=f.id) }}">
+                  <button class="btn btn-release" type="submit">🔓 LIBERAR PAINEL</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="icon">📷</div>
+      <p>Nenhum fotógrafo cadastrado ainda.</p>
+    </div>
+    {% endif %}
   </div>
 </div>
+
+<div id="modalCadastroFotografo" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalCadastroTitulo">
+    <h2 id="modalCadastroTitulo">Novo fotógrafo</h2>
+    <p class="card-sub">Preencha os dados para liberar o acesso.</p>
+    <form method="post">
+      <div class="field"><label>NOME</label><input name="nome" placeholder="Nome completo" required></div>
+      <div class="field"><label>CELULAR</label><input name="celular" placeholder="(00) 00000-0000" required></div>
+      <div class="field"><label>LOGIN</label><input name="login" placeholder="usuario.login" required autocomplete="off"></div>
+      <div class="field"><label>SENHA</label><input name="senha" type="password" placeholder="••••••••" required autocomplete="new-password"></div>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" type="button" onclick="fecharCadastroFotografo()">CANCELAR</button>
+        <button class="btn btn-submit" type="submit">CADASTRAR</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function abrirCadastroFotografo(){
+  var m=document.getElementById('modalCadastroFotografo');
+  m.classList.add('show');
+  m.setAttribute('aria-hidden','false');
+  var primeiro=m.querySelector('input[name="nome"]');
+  if(primeiro) primeiro.focus();
+}
+function fecharCadastroFotografo(){
+  var m=document.getElementById('modalCadastroFotografo');
+  m.classList.remove('show');
+  m.setAttribute('aria-hidden','true');
+}
+document.getElementById('modalCadastroFotografo').addEventListener('click',function(e){
+  if(e.target===this) fecharCadastroFotografo();
+});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape') fecharCadastroFotografo();
+});
+{% if erro %}
+// Se veio um erro de volta (ex.: cadastro inválido), reabre o modal para o usuário corrigir.
+document.addEventListener('DOMContentLoaded', abrirCadastroFotografo);
+{% endif %}
+</script>
 </body></html>
