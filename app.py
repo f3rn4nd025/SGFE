@@ -5920,7 +5920,16 @@ def web_modalidades():
         try: conn.rollback()
         except Exception: pass
         erro = str(e)
-        modalidades = locals().get("modalidades", [])
+        # Mesmo quando a validação do formulário falha (ex.: nome vazio),
+        # a lista de modalidades já cadastradas deve continuar aparecendo.
+        # Antes, esse erro acontecia ANTES da consulta que monta essa
+        # lista, então ela ficava vazia mesmo já existindo modalidades.
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT IDModalidade, Modalidade FROM tblModalidades ORDER BY Modalidade")
+            modalidades = [{"id": access_int(r[0]), "nome": r[1] or ""} for r in cur.fetchall()]
+        except Exception:
+            modalidades = locals().get("modalidades", [])
     finally:
         conn.close()
     return render_template("modalidades.html", modalidades=modalidades, mensagem=mensagem, erro=erro)
