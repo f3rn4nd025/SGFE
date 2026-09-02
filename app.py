@@ -392,7 +392,7 @@ def aplicar_modal_sgfe(response):
         // finalizar. Interceptar aqui também fazia o clique em CONFIRMAR
         // chamar form.submit() "cru", que NÃO dispara o evento submit do
         // JavaScript e por isso nunca chegava a registrar a entrega.
-        var dentroDeEntregaForm = !!(el.form && el.form.classList && el.form.classList.contains('entrega-form'));
+        var dentroDeEntregaForm = !!(el.closest && el.closest('form.entrega-form'));
         if((/^(✓\s*)?ENTREGAR$/.test(texto) || texto.indexOf('ENTREGAR')===0) && !dentroDeEntregaForm){
           return {el:el,codigo:onclick||'confirm(\"Confirmar que as fotos desta OS\\nforam entregues?\")',entrega:true};
         }
