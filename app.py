@@ -379,17 +379,7 @@ def aplicar_modal_sgfe(response):
     return false;
   }
 
-  function encontrarAlvoConfirmavel(elClicado){
-    // ENTREGAR: a exceção do formulário .entrega-form (tela ENTREGAS) é
-    // calculada UMA VEZ, a partir do elemento realmente clicado, e vale
-    // para toda a subida na árvore. Calculá-la de novo a cada nível não
-    // funciona: assim que a subida passa do próprio <form> (indo para a
-    // div/célula/linha ao redor), o formulário passa a ser descendente,
-    // não mais ancestral, e a checagem por ancestralidade deixa de
-    // enxergá-lo — voltando a interceptar nos níveis mais externos.
-    var dentroDeEntregaForm = !!(elClicado.closest && elClicado.closest('form.entrega-form'));
-
-    var el = elClicado;
+  function encontrarAlvoConfirmavel(el){
     while(el && el!==document.body){
       if(el.nodeType===1){
         var onclick=el.getAttribute('onclick')||'';
@@ -397,12 +387,7 @@ def aplicar_modal_sgfe(response):
 
         // ENTREGAR: intercepta pelo próprio botão, independentemente de
         // onde o confirm() esteja (onclick/onsubmit/código da tela).
-        // EXCEÇÃO: o formulário .entrega-form (tela ENTREGAS) já tem sua
-        // própria confirmação e envio via fetch() para /entregas/<id>/
-        // finalizar. Interceptar aqui também fazia o clique em CONFIRMAR
-        // chamar form.submit() "cru", que NÃO dispara o evento submit do
-        // JavaScript e por isso nunca chegava a registrar a entrega.
-        if((/^(✓\s*)?ENTREGAR$/.test(texto) || texto.indexOf('ENTREGAR')===0) && !dentroDeEntregaForm){
+        if(/^(✓\s*)?ENTREGAR$/.test(texto) || texto.indexOf('ENTREGAR')===0){
           return {el:el,codigo:onclick||'confirm(\"Confirmar que as fotos desta OS\\nforam entregues?\")',entrega:true};
         }
 
@@ -446,17 +431,30 @@ def aplicar_modal_sgfe(response):
       var el=alvo.el;
       var codigo=alvo.codigo;
       mostrar(el,codigo,function(){
-        // ENTREGAR: depois da confirmação, envia exatamente o mesmo
-        // formulário/rota original, mas sem executar o confirm() nativo.
+        // ENTREGAR: depois da confirmação nesta caixa (padrão SGFE), envia
+        // exatamente o mesmo formulário/rota original.
         if(alvo.entrega && el.form){
           var form=el.form;
           var onsubmit=form.getAttribute('onsubmit');
           var onclick=el.getAttribute('onclick');
+          var confirmOriginal=window.confirm;
           try{
             form.removeAttribute('onsubmit');
             el.removeAttribute('onclick');
-            HTMLFormElement.prototype.submit.call(form);
+            // A ação já foi confirmada nesta caixa. Se a própria tela
+            // também confirma antes de enviar (como a tela ENTREGAS, que
+            // confirma de novo e só então chama fetch() para
+            // /entregas/<id>/finalizar), evitamos perguntar uma segunda
+            // vez usando o confirm() nativo do navegador.
+            window.confirm=function(){ return true; };
+            // requestSubmit() é usado em vez de submit(): só ele dispara
+            // o evento "submit" do JavaScript. submit() envia o
+            // formulário "por baixo dos panos" sem disparar esse evento,
+            // e por isso a tela nunca chegava a chamar o fetch() real.
+            if(form.requestSubmit){ form.requestSubmit(el); }
+            else{ HTMLFormElement.prototype.submit.call(form); }
           }finally{
+            window.confirm=confirmOriginal;
             if(onsubmit!==null) form.setAttribute('onsubmit',onsubmit);
             if(onclick!==null) el.setAttribute('onclick',onclick);
           }
