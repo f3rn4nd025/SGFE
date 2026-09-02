@@ -2084,12 +2084,14 @@ def api_evento_geral():
     """
     PAINEL SOMENTE.
 
-    V12 parte da versão V10, que preserva a correção do menu Atletas.
-    A única área alterada aqui é /api/evento-geral.
-
-    No PostgreSQL, IDEvento está armazenado como character varying.
-    O erro anterior acontecia porque o Painel convertia o ID para inteiro
-    antes de usá-lo no WHERE IDEvento=?.
+    IDEvento é character varying no PostgreSQL (herança da migração do
+    Access) e vários registros antigos foram migrados em representações
+    diferentes (bytes/hex/texto). Comparar com CAST(...AS TEXT)=CAST(?AS
+    TEXT) ou com JOIN direto falha silenciosamente para esses registros
+    (zero linhas, sem erro) — por isso os cartões apareciam todos
+    zerados. A solução, igual às demais telas (Vendas, Pagamentos,
+    Entregas, Histórico, Eventos/Geral), é buscar cada tabela por
+    completo e cruzar os IDs já normalizados em Python.
     """
     conn = None
     try:
@@ -2108,7 +2110,7 @@ def api_evento_geral():
         eventos = []
         for r in cur.fetchall():
             eventos.append({
-                "id": r[0],
+                "id": access_int(r[0]),
                 "nome": str(r[1] or ""),
                 "data": r[2].strftime("%d/%m/%Y")
                         if hasattr(r[2], "strftime") else str(r[2] or ""),
@@ -2117,13 +2119,15 @@ def api_evento_geral():
             })
 
         # -----------------------------------------------------
-        # 2) ID do evento selecionado
-        #    IMPORTANTE: mantém como texto para o PostgreSQL.
+        # 2) ID do evento selecionado, já normalizado
         # -----------------------------------------------------
-        evento_id = request.args.get("evento", "").strip()
-
-        if not evento_id and eventos:
-            evento_id = str(eventos[0]["id"])
+        evento_id_raw = request.args.get("evento", "").strip()
+        if evento_id_raw:
+            evento_selecionado = access_int(evento_id_raw)
+        elif eventos:
+            evento_selecionado = eventos[0]["id"]
+        else:
+            evento_selecionado = 0
 
         resumo = {
             "agendamentos": 0,
@@ -2138,83 +2142,60 @@ def api_evento_geral():
 
         evento_info = None
 
-        if evento_id:
-            # -------------------------------------------------
-            # 3) Evento selecionado
-            #    IDEvento recebe STRING, pois é varchar no PG.
-            # -------------------------------------------------
-            cur.execute("""
-                SELECT IDEvento, NomeEvento, DataEvento, Cidade, Ativo
-                FROM tblEvento
-                WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)
-            """, [str(evento_id)])
+        if evento_selecionado:
+            evento_info = next(
+                (e for e in eventos if e["id"] == evento_selecionado), None
+            )
 
-            r = cur.fetchone()
-
-            if r:
-                evento_info = {
-                    "id": r[0],
-                    "nome": str(r[1] or ""),
-                    "data": r[2].strftime("%d/%m/%Y")
-                            if hasattr(r[2], "strftime") else str(r[2] or ""),
-                    "cidade": str(r[3] or ""),
-                    "ativo": bool(r[4]) if r[4] is not None else False,
-                }
+            if evento_info:
+                # -------------------------------------------------
+                # 3) AGENDAMENTOS
+                # -------------------------------------------------
+                cur.execute("SELECT IDEvento FROM tblAgendamentos")
+                resumo["agendamentos"] = sum(
+                    1 for r in cur.fetchall()
+                    if access_int(r[0]) == evento_selecionado
+                )
 
                 # -------------------------------------------------
-                # 4) AGENDAMENTOS
+                # 4) VENDAS (excluindo CANCELADAS, mesmo critério das
+                #    demais telas)
                 # -------------------------------------------------
-                resumo["agendamentos"] = int(scalar(
-                    cur,
-                    "SELECT Count(*) FROM tblAgendamentos WHERE CAST(IDEvento AS TEXT)=CAST(? AS TEXT)",
-                    0,
-                    [str(evento_id)]
-                ) or 0)
+                cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
+                status_nome_map = {access_int(r[0]): str(r[1] or "") for r in cur.fetchall()}
 
-                # -------------------------------------------------
-                # 5) VENDAS
-                # -------------------------------------------------
                 cur.execute("""
-                    SELECT V.IDVenda, V.ValorFinal, V.Finalizado,
-                           V.StatusPagamento
-                    FROM tblVendaPacotes AS V
-                    WHERE CAST(V.IDEvento AS TEXT)=CAST(? AS TEXT)
-                """, [str(evento_id)])
-
-                vendas_evento = cur.fetchall()
+                    SELECT IDVenda, ValorFinal, Finalizado, StatusPagamento,
+                           IDStatusVenda, IDEvento
+                    FROM tblVendaPacotes
+                """)
+                vendas_evento = [
+                    r for r in cur.fetchall()
+                    if access_int(r[5]) == evento_selecionado
+                    and "CANCEL" not in status_nome_map.get(access_int(r[4]), "").upper()
+                ]
 
                 resumo["vendas"] = len(vendas_evento)
                 resumo["total_vendido"] = sum(
                     float(r[1] or 0) for r in vendas_evento
                 )
-
                 resumo["entregas_pendentes"] = sum(
                     1 for r in vendas_evento
                     if r[2] is None or not bool(r[2])
                 )
 
                 # -------------------------------------------------
-                # 6) PAGAMENTOS
+                # 5) PAGAMENTOS
                 # -------------------------------------------------
+                cur.execute("SELECT IDVenda, Sum(ValorPago) FROM tblPagamento GROUP BY IDVenda")
                 pagamentos = {}
-
-                cur.execute("""
-                    SELECT P.IDVenda, Sum(P.ValorPago)
-                    FROM tblPagamento AS P
-                    INNER JOIN tblVendaPacotes AS V
-                        ON P.IDVenda=V.IDVenda
-                    WHERE V.IDEvento=?
-                    GROUP BY P.IDVenda
-                """, [str(evento_id)])
-
                 for r in cur.fetchall():
-                    pagamentos[str(r[0])] = float(r[1] or 0)
+                    pagamentos[access_int(r[0])] = float(r[1] or 0)
 
                 recebido = 0.0
                 pendentes = 0
-
                 for r in vendas_evento:
-                    venda_id = str(r[0])
+                    venda_id = access_int(r[0])
                     valor = float(r[1] or 0)
                     status_pg = str(r[3] or "aberto").strip().lower()
                     pago = pagamentos.get(venda_id, 0.0)
@@ -2231,15 +2212,16 @@ def api_evento_geral():
                 resumo["pagamentos_pendentes"] = pendentes
 
                 # -------------------------------------------------
-                # 7) DESPESAS
+                # 6) DESPESAS
                 # -------------------------------------------------
-                resumo["despesas"] = money(scalar(
-                    cur,
-                    "SELECT Sum(ValorDespesa) "
-                    "FROM tblDespesasEvento WHERE IDEvento=?",
-                    0,
-                    [str(evento_id)]
-                ))
+                try:
+                    cur.execute("SELECT IDEvento, ValorDespesa FROM tblDespesasEvento")
+                    resumo["despesas"] = money(sum(
+                        float(r[1] or 0) for r in cur.fetchall()
+                        if access_int(r[0]) == evento_selecionado
+                    ))
+                except Exception:
+                    resumo["despesas"] = 0.0
 
                 resumo["lucro"] = (
                     resumo["total_recebido"] - resumo["despesas"]
