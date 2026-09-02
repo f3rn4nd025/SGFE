@@ -292,16 +292,6 @@ def aplicar_modal_sgfe(response):
 (function(){
   'use strict';
 
-  // === AVISO TEMPORÁRIO DE DIAGNÓSTICO (pode ser removido depois) ===
-  // Mostra numa caixinha na tela qualquer erro de JavaScript que acontecer
-  // na página, para ajudar a identificar por que um botão não está
-  // respondendo, sem precisar abrir o console do navegador (F12).
-  window.addEventListener('error', function(ev){
-    try{
-      alert('Aviso de diagnóstico (erro no JavaScript da página):\n\n' + (ev && ev.message ? ev.message : 'erro desconhecido'));
-    }catch(e){}
-  });
-
   var modal, titulo, mensagem, confirmar, cancelar, icone;
   var pendente=null;
   var liberados=[];
@@ -518,6 +508,12 @@ def aplicar_modal_sgfe(response):
         if request.path == '/entregas':
             css_entregas_fonte = "<style id='sgfe-entregas-fonte-normal'>table tbody td, table tbody td * { font-weight: 400 !important; }</style>"
             html = html[:pos] + css_entregas_fonte + html[pos:]
+
+        # PAGAMENTOS: mesma normalização de fonte da tela ENTREGAS (só
+        # visual). Não altera filtro, consultas, rotas, banco ou ação.
+        if request.path == '/pagamentos':
+            css_pagamentos_fonte = "<style id='sgfe-pagamentos-fonte-normal'>table tbody td, table tbody td * { font-weight: 400 !important; }</style>"
+            html = html[:pos] + css_pagamentos_fonte + html[pos:]
 
         response.set_data(html)
         return response
