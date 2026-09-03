@@ -1231,37 +1231,49 @@ def _ensure_autoincrement_ids(conn):
     fez, contando com o Access) falha com "null value ... violates
     not-null constraint".
 
+    Em vez de corrigir tabela por tabela (lista fixa), esta versão
+    varre TODAS as chaves primárias inteiras do schema atual e corrige
+    automaticamente qualquer uma que ainda não tenha sequence — cobre
+    tblClientes, tblDespesasEvento, tblModalidades, tblEquipes,
+    tblEvento e qualquer outra tabela com o mesmo problema, inclusive
+    as que ainda não apareceram nos testes.
+
     Roda a cada conexão (mesmo padrão dos outros _ensure_*), corrigindo
     o schema da vez (public ou o schema privado do fotógrafo).
     """
     if not _is_postgres():
         return
-    tabelas_colunas = [
-        ("tbldespesasevento", "iddespesa"),
-        ("tblmodalidades", "idmodalidade"),
-        ("tblequipes", "idequipe"),
-        ("tblevento", "idevento"),
-    ]
     cur = conn.cursor()
-    for tabela, coluna in tabelas_colunas:
+    try:
+        cur.execute(
+            """
+            SELECT tc.table_name, kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+             AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.columns col
+              ON col.table_schema = tc.table_schema
+             AND col.table_name = tc.table_name
+             AND col.column_name = kcu.column_name
+            WHERE tc.constraint_type = 'PRIMARY KEY'
+              AND tc.table_schema = current_schema()
+              AND col.data_type IN ('integer', 'bigint', 'smallint')
+              AND (col.column_default IS NULL OR col.column_default NOT LIKE %s)
+            """,
+            ("%nextval%",),
+        )
+        pendentes = cur.fetchall()
+    except Exception as exc:
+        print(f"[SGFE] Aviso ao varrer chaves primárias: {exc}", flush=True)
         try:
-            cur.execute(
-                "SELECT 1 FROM information_schema.tables "
-                "WHERE table_schema = current_schema() AND table_name = %s",
-                (tabela,),
-            )
-            if not cur.fetchone():
-                continue
+            conn.rollback()
+        except Exception:
+            pass
+        return
 
-            cur.execute(
-                "SELECT column_default FROM information_schema.columns "
-                "WHERE table_schema = current_schema() AND table_name = %s AND column_name = %s",
-                (tabela, coluna),
-            )
-            row = cur.fetchone()
-            if row and row[0] and "nextval" in str(row[0]):
-                continue  # já tem sequence, não mexe
-
+    for tabela, coluna in pendentes:
+        try:
             seq_nome = f"{tabela}_{coluna}_seq"
             cur.execute(f'CREATE SEQUENCE IF NOT EXISTS "{seq_nome}"')
             cur.execute(
@@ -1274,6 +1286,7 @@ def _ensure_autoincrement_ids(conn):
                 f'COALESCE((SELECT MAX("{coluna}") FROM "{tabela}"), 0) + 1, false)'
             )
             conn.commit()
+            print(f"[SGFE] Auto-incremento corrigido: {tabela}.{coluna}", flush=True)
         except Exception as exc:
             print(f"[SGFE] Aviso migração auto-incremento {tabela}.{coluna}: {exc}", flush=True)
             try:
