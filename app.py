@@ -1221,6 +1221,71 @@ def _cancelar_venda_operacional(cur, id_venda):
     return id_evento
 
 
+def _ensure_autoincrement_ids(conn):
+    """
+    Corrige tabelas migradas do Access que ficaram sem auto-incremento
+    de verdade no PostgreSQL. No Access, o campo "Numeração Automática"
+    gera o próximo ID sozinho; ao migrar pro Postgres, essas colunas
+    viraram INTEGER comuns, sem sequence/DEFAULT associado. Resultado:
+    todo INSERT que não informa o ID explicitamente (como o app sempre
+    fez, contando com o Access) falha com "null value ... violates
+    not-null constraint".
+
+    Roda a cada conexão (mesmo padrão dos outros _ensure_*), corrigindo
+    o schema da vez (public ou o schema privado do fotógrafo).
+    """
+    if not _is_postgres():
+        return
+    tabelas_colunas = [
+        ("tbldespesasevento", "iddespesa"),
+        ("tblmodalidades", "idmodalidade"),
+        ("tblequipes", "idequipe"),
+        ("tblevento", "idevento"),
+    ]
+    cur = conn.cursor()
+    for tabela, coluna in tabelas_colunas:
+        try:
+            cur.execute(
+                "SELECT 1 FROM information_schema.tables "
+                "WHERE table_schema = current_schema() AND table_name = %s",
+                (tabela,),
+            )
+            if not cur.fetchone():
+                continue
+
+            cur.execute(
+                "SELECT column_default FROM information_schema.columns "
+                "WHERE table_schema = current_schema() AND table_name = %s AND column_name = %s",
+                (tabela, coluna),
+            )
+            row = cur.fetchone()
+            if row and row[0] and "nextval" in str(row[0]):
+                continue  # já tem sequence, não mexe
+
+            seq_nome = f"{tabela}_{coluna}_seq"
+            cur.execute(f'CREATE SEQUENCE IF NOT EXISTS "{seq_nome}"')
+            cur.execute(
+                f'ALTER TABLE "{tabela}" ALTER COLUMN "{coluna}" '
+                f"SET DEFAULT nextval('{seq_nome}')"
+            )
+            cur.execute(f'ALTER SEQUENCE "{seq_nome}" OWNED BY "{tabela}"."{coluna}"')
+            cur.execute(
+                f"SELECT setval('{seq_nome}', "
+                f'COALESCE((SELECT MAX("{coluna}") FROM "{tabela}"), 0) + 1, false)'
+            )
+            conn.commit()
+        except Exception as exc:
+            print(f"[SGFE] Aviso migração auto-incremento {tabela}.{coluna}: {exc}", flush=True)
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    try:
+        cur.close()
+    except Exception:
+        pass
+
+
 def _ensure_fotografos(conn):
     """Garante a estrutura de fotógrafos, incluindo o campo de bloqueio."""
     cur = conn.cursor()
@@ -1397,6 +1462,10 @@ def get_connection():
         pass
     try:
         _ensure_fotografos(conn)
+    except Exception:
+        pass
+    try:
+        _ensure_autoincrement_ids(conn)
     except Exception:
         pass
     return conn
