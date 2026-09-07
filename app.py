@@ -480,11 +480,28 @@ def aplicar_modal_sgfe(response):
 
       mostrar(base,codigoConfirm,function(){
         liberados.push(form);
-        if(form.requestSubmit){
-          if(submitter && submitter.form===form) form.requestSubmit(submitter);
-          else form.requestSubmit();
-        }else{
-          HTMLFormElement.prototype.submit.call(form);
+        // Neutraliza o confirm() nativo (do onsubmit do form e/ou do
+        // onclick do botão) durante o reenvio, igual já era feito no
+        // fluxo do ENTREGAR. Sem isso, o navegador chama o confirm()
+        // original de novo ao reenviar o form, abrindo um segundo
+        // diálogo (nativo) por cima do modal do SGFE.
+        var onsubmitOriginal=form.getAttribute('onsubmit');
+        var onclickSubmitterOriginal=submitter && submitter.getAttribute ? submitter.getAttribute('onclick') : null;
+        var confirmOriginal=window.confirm;
+        try{
+          if(onsubmitOriginal!==null) form.removeAttribute('onsubmit');
+          if(onclickSubmitterOriginal!==null) submitter.removeAttribute('onclick');
+          window.confirm=function(){ return true; };
+          if(form.requestSubmit){
+            if(submitter && submitter.form===form) form.requestSubmit(submitter);
+            else form.requestSubmit();
+          }else{
+            HTMLFormElement.prototype.submit.call(form);
+          }
+        }finally{
+          window.confirm=confirmOriginal;
+          if(onsubmitOriginal!==null) form.setAttribute('onsubmit',onsubmitOriginal);
+          if(onclickSubmitterOriginal!==null) submitter.setAttribute('onclick',onclickSubmitterOriginal);
         }
       });
     },true);
@@ -492,6 +509,64 @@ def aplicar_modal_sgfe(response):
 
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar);
   else iniciar();
+})();
+</script>
+
+<script id="fg-mascara-celular-script">
+(function(){
+  'use strict';
+
+  // Aplica a máscara (xx)xxxxx-xxxx em qualquer campo de celular/telefone
+  // do sistema (identificado pelo name/id conter "celular" ou "telefone"),
+  // sem precisar alterar template por template. Não mexe em regra de
+  // negócio nem no que é gravado no banco: a máscara é só visual, no
+  // input; o valor enviado no submit continua sendo o texto do campo
+  // (com a máscara já aplicada), então nenhuma rota precisa mudar.
+
+  function ehCampoTelefone(el){
+    if(!el || el.tagName!=='INPUT') return false;
+    var tipo=(el.getAttribute('type')||'text').toLowerCase();
+    if(['text','tel','search'].indexOf(tipo)<0) return false;
+    var chave=((el.getAttribute('name')||'')+' '+(el.id||'')).toLowerCase();
+    return chave.indexOf('celular')>=0 || chave.indexOf('telefone')>=0;
+  }
+
+  function mascarar(valor){
+    var d=(valor||'').replace(/\D/g,'').slice(0,11);
+    if(d.length===0) return '';
+    if(d.length<=2) return '('+d;
+    if(d.length<=6) return '('+d.slice(0,2)+')'+d.slice(2);
+    if(d.length<=10) return '('+d.slice(0,2)+')'+d.slice(2,6)+'-'+d.slice(6);
+    return '('+d.slice(0,2)+')'+d.slice(2,7)+'-'+d.slice(7);
+  }
+
+  function aoDigitar(e){
+    var el=e.target;
+    if(!ehCampoTelefone(el)) return;
+    var posicaoAntes=el.selectionEnd;
+    var tamanhoAntes=el.value.length;
+    el.value=mascarar(el.value);
+    var diferenca=el.value.length-tamanhoAntes;
+    var novaPosicao=Math.max(0,(posicaoAntes||el.value.length)+diferenca);
+    try{ el.setSelectionRange(novaPosicao,novaPosicao); }catch(err){}
+  }
+
+  function aplicarEmTodosOsCampos(){
+    var campos=document.querySelectorAll('input');
+    for(var i=0;i<campos.length;i++){
+      if(ehCampoTelefone(campos[i]) && campos[i].value){
+        campos[i].value=mascarar(campos[i].value);
+      }
+    }
+  }
+
+  document.addEventListener('input',aoDigitar,true);
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',aplicarEmTodosOsCampos);
+  }else{
+    aplicarEmTodosOsCampos();
+  }
 })();
 </script>
 """
@@ -1231,49 +1306,37 @@ def _ensure_autoincrement_ids(conn):
     fez, contando com o Access) falha com "null value ... violates
     not-null constraint".
 
-    Em vez de corrigir tabela por tabela (lista fixa), esta versão
-    varre TODAS as chaves primárias inteiras do schema atual e corrige
-    automaticamente qualquer uma que ainda não tenha sequence — cobre
-    tblClientes, tblDespesasEvento, tblModalidades, tblEquipes,
-    tblEvento e qualquer outra tabela com o mesmo problema, inclusive
-    as que ainda não apareceram nos testes.
-
     Roda a cada conexão (mesmo padrão dos outros _ensure_*), corrigindo
     o schema da vez (public ou o schema privado do fotógrafo).
     """
     if not _is_postgres():
         return
+    tabelas_colunas = [
+        ("tbldespesasevento", "iddespesa"),
+        ("tblmodalidades", "idmodalidade"),
+        ("tblequipes", "idequipe"),
+        ("tblevento", "idevento"),
+    ]
     cur = conn.cursor()
-    try:
-        cur.execute(
-            """
-            SELECT tc.table_name, kcu.column_name
-            FROM information_schema.table_constraints tc
-            JOIN information_schema.key_column_usage kcu
-              ON tc.constraint_name = kcu.constraint_name
-             AND tc.table_schema = kcu.table_schema
-            JOIN information_schema.columns col
-              ON col.table_schema = tc.table_schema
-             AND col.table_name = tc.table_name
-             AND col.column_name = kcu.column_name
-            WHERE tc.constraint_type = 'PRIMARY KEY'
-              AND tc.table_schema = current_schema()
-              AND col.data_type IN ('integer', 'bigint', 'smallint')
-              AND (col.column_default IS NULL OR col.column_default NOT LIKE %s)
-            """,
-            ("%nextval%",),
-        )
-        pendentes = cur.fetchall()
-    except Exception as exc:
-        print(f"[SGFE] Aviso ao varrer chaves primárias: {exc}", flush=True)
+    for tabela, coluna in tabelas_colunas:
         try:
-            conn.rollback()
-        except Exception:
-            pass
-        return
+            cur.execute(
+                "SELECT 1 FROM information_schema.tables "
+                "WHERE table_schema = current_schema() AND table_name = %s",
+                (tabela,),
+            )
+            if not cur.fetchone():
+                continue
 
-    for tabela, coluna in pendentes:
-        try:
+            cur.execute(
+                "SELECT column_default FROM information_schema.columns "
+                "WHERE table_schema = current_schema() AND table_name = %s AND column_name = %s",
+                (tabela, coluna),
+            )
+            row = cur.fetchone()
+            if row and row[0] and "nextval" in str(row[0]):
+                continue  # já tem sequence, não mexe
+
             seq_nome = f"{tabela}_{coluna}_seq"
             cur.execute(f'CREATE SEQUENCE IF NOT EXISTS "{seq_nome}"')
             cur.execute(
@@ -1286,7 +1349,6 @@ def _ensure_autoincrement_ids(conn):
                 f'COALESCE((SELECT MAX("{coluna}") FROM "{tabela}"), 0) + 1, false)'
             )
             conn.commit()
-            print(f"[SGFE] Auto-incremento corrigido: {tabela}.{coluna}", flush=True)
         except Exception as exc:
             print(f"[SGFE] Aviso migração auto-incremento {tabela}.{coluna}: {exc}", flush=True)
             try:
