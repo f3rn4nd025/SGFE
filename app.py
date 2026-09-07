@@ -6816,14 +6816,21 @@ def excluir_evento(evento_id):
         cur=conn.cursor()
 
         # Preserva o histórico: evento usado em qualquer operação não é apagado.
+        # IMPORTANTE: IDEvento nessas tabelas ficou como character varying
+        # (herança da migração do Access) — mesmo problema de tipos já
+        # visto e corrigido em VENDAS, PAGAMENTOS, ENTREGAS e HISTÓRICO.
+        # Comparar direto no SQL com um inteiro quebra no PostgreSQL
+        # ("operator does not exist: character varying = integer") e
+        # ainda deixa a conexão numa transação abortada. Por isso a
+        # coluna é lida por completo e comparada em Python.
         checks=[
             ("tblAgendamentos","IDEvento","agendamentos"),
             ("tblVendaPacotes","IDEvento","vendas/OS"),
             ("tblPrecoEvento","IDEvento","preços cadastrados")
         ]
         for tabela,campo,nome in checks:
-            cur.execute(f"SELECT TOP 1 * FROM {tabela} WHERE {campo}=?",[evento_id])
-            if cur.fetchone():
+            cur.execute(f"SELECT {campo} FROM {tabela}")
+            if any(access_int(r2[0])==evento_id for r2 in cur.fetchall()):
                 return redirect(url_for(
                     "web_eventos",
                     erro=f"Este evento possui {nome} e não pode ser excluído. O histórico foi preservado."
