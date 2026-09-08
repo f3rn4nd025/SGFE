@@ -4225,28 +4225,40 @@ def venda_a_partir_do_agendamento(agendamento_id):
     conn = get_connection()
     try:
         cur = conn.cursor()
+        # Mesmo problema de tipos da migração do Access: IDCliente/IDEvento
+        # em tblAgendamentos são texto, tblClientes.IDCliente e
+        # tblEvento.IDEvento são inteiros. JOIN direto quebra no
+        # PostgreSQL, então busca cada tabela separada e cruza em Python.
         cur.execute("""
-        SELECT A.IDAgendamento, A.IDCliente, C.Nome AS Cliente,
-               A.IDEvento, E.NomeEvento AS Evento,
-               E.DataEvento, A.DataAgendamento,
-               S.StatusAgendamento AS Status
-        FROM (((tblAgendamentos AS A
-        LEFT JOIN tblClientes AS C ON A.IDCliente=C.IDCliente)
-        LEFT JOIN tblEvento AS E ON A.IDEvento=E.IDEvento)
-        LEFT JOIN tblStatusAgendamento AS S
-          ON A.IDStatusAgendamento=S.IDStatusAgendamento)
-        WHERE A.IDAgendamento=?
+            SELECT IDAgendamento, IDCliente, IDEvento, DataAgendamento, IDStatusAgendamento
+            FROM tblAgendamentos
+            WHERE IDAgendamento=?
         """, [agendamento_id])
-        r = cur.fetchone()
-        if not r:
+        a = cur.fetchone()
+        if not a:
             return "Agendamento não encontrado", 404
 
+        id_cliente = access_int(a[1])
+        id_evento = access_int(a[2])
+
+        cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=?", [id_cliente])
+        c = cur.fetchone()
+
+        cur.execute("SELECT NomeEvento, DataEvento FROM tblEvento WHERE IDEvento=?", [id_evento])
+        e = cur.fetchone()
+
+        status_nome = ""
+        if a[4] is not None:
+            cur.execute("SELECT StatusAgendamento FROM tblStatusAgendamento WHERE IDStatusAgendamento=?", [access_int(a[4])])
+            s = cur.fetchone()
+            status_nome = str(s[0] or "") if s else ""
+
         info = {
-            "id": r[0], "cliente_id": r[1], "cliente": r[2] or "",
-            "evento_id": r[3], "evento": r[4] or "",
-            "data_evento": r[5].strftime("%d/%m/%Y") if hasattr(r[5], "strftime") else str(r[5] or ""),
-            "data_agendamento": r[6].strftime("%d/%m/%Y") if hasattr(r[6], "strftime") else str(r[6] or ""),
-            "status": r[7] or "",
+            "id": access_int(a[0]), "cliente_id": id_cliente, "cliente": str(c[0] or "") if c else "",
+            "evento_id": id_evento, "evento": str(e[0] or "") if e else "",
+            "data_evento": e[1].strftime("%d/%m/%Y") if e and hasattr(e[1], "strftime") else str((e[1] if e else "") or ""),
+            "data_agendamento": a[3].strftime("%d/%m/%Y") if hasattr(a[3], "strftime") else str(a[3] or ""),
+            "status": status_nome,
             "qtd_preselecionada": access_int(request.args.get("qtd_provas") or 0)
         }
 
