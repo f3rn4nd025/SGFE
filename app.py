@@ -1056,7 +1056,14 @@ def _ensure_balizamento_provas(conn):
         cur.execute("SELECT TOP 1 IDBalizamento FROM tblBalizamentoProvas")
         return
     except Exception:
-        pass
+        # PostgreSQL aborta a transação quando o SELECT falha (tabela
+        # ainda não existe). É obrigatório fazer rollback antes do
+        # CREATE TABLE, senão ele também falha (transação abortada).
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        cur = conn.cursor()
     cur.execute("""
         CREATE TABLE tblBalizamentoProvas (
             IDBalizamento AUTOINCREMENT PRIMARY KEY,
@@ -1651,7 +1658,14 @@ def _ensure_balizamento_manual(conn):
         cur.execute("SELECT TOP 1 IDManual FROM tblBalizamentoManualProvas")
         return
     except Exception:
-        pass
+        # PostgreSQL aborta a transação quando o SELECT falha (tabela
+        # ainda não existe). É obrigatório fazer rollback antes do
+        # CREATE TABLE, senão ele também falha (transação abortada).
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        cur = conn.cursor()
 
     cur.execute("""
         CREATE TABLE tblBalizamentoManualProvas (
@@ -3135,23 +3149,39 @@ def balizamento_agendamento(agendamento_id):
     conn = get_connection()
     try:
         cur = conn.cursor()
+        # IMPORTANTE: IDCliente e IDEvento em tblAgendamentos ficaram como
+        # character varying (herança da migração do Access), enquanto
+        # tblClientes.IDCliente e tblEvento.IDEvento são inteiros. Fazer
+        # JOIN direto no SQL entre eles quebra no PostgreSQL ("operator
+        # does not exist: character varying = bigint"). Por isso a busca
+        # é feita em três consultas separadas, cruzadas em Python — mesmo
+        # padrão já usado em VENDAS, PAGAMENTOS, ENTREGAS e HISTÓRICO.
         cur.execute("""
-            SELECT A.IDAgendamento, A.IDCliente, C.Nome AS Atleta, A.IDEvento,
-                   E.NomeEvento, E.DataEvento, E.BalizamentoArquivo
-            FROM ((tblAgendamentos AS A
-            LEFT JOIN tblClientes AS C ON A.IDCliente=C.IDCliente)
-            LEFT JOIN tblEvento AS E ON A.IDEvento=E.IDEvento)
-            WHERE A.IDAgendamento=?
+            SELECT IDAgendamento, IDCliente, IDEvento
+            FROM tblAgendamentos
+            WHERE IDAgendamento=?
         """, [agendamento_id])
-        r = cur.fetchone()
-        if not r:
+        a = cur.fetchone()
+        if not a:
             return "Agendamento não encontrado", 404
 
+        id_cliente = access_int(a[1])
+        id_evento = access_int(a[2])
+
+        cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=?", [id_cliente])
+        cliente = cur.fetchone()
+
+        cur.execute("""
+            SELECT NomeEvento, DataEvento, BalizamentoArquivo
+            FROM tblEvento WHERE IDEvento=?
+        """, [id_evento])
+        evento = cur.fetchone()
+
         info = {
-            "id": access_int(r[0]), "cliente_id": access_int(r[1]), "atleta": str(r[2] or ""),
-            "evento_id": access_int(r[3]), "evento": str(r[4] or ""),
-            "data_evento": r[5].strftime("%d/%m/%Y") if hasattr(r[5], "strftime") else str(r[5] or ""),
-            "arquivo": str(r[6] or "")
+            "id": access_int(a[0]), "cliente_id": id_cliente, "atleta": str(cliente[0] or "") if cliente else "",
+            "evento_id": id_evento, "evento": str(evento[0] or "") if evento else "",
+            "data_evento": evento[1].strftime("%d/%m/%Y") if evento and hasattr(evento[1], "strftime") else str((evento[1] if evento else "") or ""),
+            "arquivo": str(evento[2] or "") if evento else ""
         }
         if not info["arquivo"]:
             return redirect(url_for("web_agendamentos", erro="Este evento ainda não possui balizamento anexado."))
