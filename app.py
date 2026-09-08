@@ -3172,16 +3172,21 @@ def balizamento_agendamento(agendamento_id):
         cliente = cur.fetchone()
 
         cur.execute("""
-            SELECT NomeEvento, DataEvento, BalizamentoArquivo
+            SELECT NomeEvento, DataEvento, BalizamentoArquivo, Cidade
             FROM tblEvento WHERE IDEvento=?
         """, [id_evento])
-        evento = cur.fetchone()
+        evento_row = cur.fetchone()
 
         info = {
             "id": access_int(a[0]), "cliente_id": id_cliente, "atleta": str(cliente[0] or "") if cliente else "",
-            "evento_id": id_evento, "evento": str(evento[0] or "") if evento else "",
-            "data_evento": evento[1].strftime("%d/%m/%Y") if evento and hasattr(evento[1], "strftime") else str((evento[1] if evento else "") or ""),
-            "arquivo": str(evento[2] or "") if evento else ""
+            "evento_id": id_evento, "evento": str(evento_row[0] or "") if evento_row else "",
+            "data_evento": evento_row[1].strftime("%d/%m/%Y") if evento_row and hasattr(evento_row[1], "strftime") else str((evento_row[1] if evento_row else "") or ""),
+            "arquivo": str(evento_row[2] or "") if evento_row else ""
+        }
+        evento = {
+            "nome": info["evento"],
+            "data": info["data_evento"],
+            "cidade": str(evento_row[3] or "") if evento_row else ""
         }
         if not info["arquivo"]:
             return redirect(url_for("web_agendamentos", erro="Este evento ainda não possui balizamento anexado."))
@@ -3264,7 +3269,7 @@ def balizamento_agendamento(agendamento_id):
 
         ocorrencias.sort(key=lambda x: (access_int(x.get("prova")), access_int(x.get("serie")), access_int(x.get("raia"))))
 
-        return render_template("balizamento.html", info=info, ocorrencias=ocorrencias, marcadas=marcadas)
+        return render_template("balizamento.html", info=info, evento=evento, ocorrencias=ocorrencias, marcadas=marcadas)
     finally:
         conn.close()
 
