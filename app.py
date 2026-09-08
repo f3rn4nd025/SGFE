@@ -3189,7 +3189,7 @@ def balizamento_agendamento(agendamento_id):
         cur.execute("""
             SELECT IDBalizamento, NumeroProva, NomeProva, NumeroSerie, Raia, NomeAtleta, Registro, Pagina
             FROM tblBalizamentoProvas
-            WHERE IDEvento=? AND NomeAtleta LIKE ?
+            WHERE IDEvento=? AND NomeAtleta ILIKE ?
             ORDER BY NumeroProva, NumeroSerie, Raia
         """, [info["evento_id"], "%" + info["atleta"] + "%"])
         ocorrencias = []
@@ -4107,26 +4107,76 @@ def agendamento_novo_atleta():
         conn.close()
 
 
+@app.route("/api/balizamento/debug/<int:evento_id>")
+def api_balizamento_debug(evento_id):
+    """Diagnóstico temporário: mostra o que ficou gravado no balizamento
+    estruturado do evento, pra conferir se um nome específico foi
+    reconhecido corretamente na importação do PDF."""
+    nome_busca = request.args.get("nome", "").strip()
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        if nome_busca:
+            cur.execute("""
+                SELECT NumeroProva, NomeProva, NumeroSerie, Raia, NomeAtleta, Registro, Pagina
+                FROM tblBalizamentoProvas
+                WHERE IDEvento=? AND NomeAtleta ILIKE ?
+                ORDER BY NumeroProva, NumeroSerie, Raia
+            """, [evento_id, "%" + nome_busca + "%"])
+        else:
+            cur.execute("""
+                SELECT NumeroProva, NomeProva, NumeroSerie, Raia, NomeAtleta, Registro, Pagina
+                FROM tblBalizamentoProvas
+                WHERE IDEvento=?
+                ORDER BY NumeroProva, NumeroSerie, Raia
+            """, [evento_id])
+        linhas = cur.fetchall()
+        return jsonify({
+            "ok": True,
+            "evento_id": evento_id,
+            "filtro_nome": nome_busca,
+            "total_encontrado": len(linhas),
+            "registros": [
+                {
+                    "prova": access_int(r[0]), "nome_prova": str(r[1] or ""),
+                    "serie": access_int(r[2]), "raia": access_int(r[3]),
+                    "nome_atleta": str(r[4] or ""), "nome_normalizado": _normalizar_nome(r[4]),
+                    "registro": str(r[5] or ""), "pagina": access_int(r[6])
+                } for r in linhas[:50]
+            ]
+        })
+    finally:
+        conn.close()
+
+
 @app.route("/api/balizamento/atleta/<int:agendamento_id>")
 def api_balizamento_atleta(agendamento_id):
     conn = get_connection()
     try:
         cur = conn.cursor()
-        cur.execute("""
-            SELECT A.IDCliente, A.IDEvento, C.Nome, E.NomeEvento, E.BalizamentoArquivo
-            FROM ((tblAgendamentos AS A
-            LEFT JOIN tblClientes AS C ON A.IDCliente=C.IDCliente)
-            LEFT JOIN tblEvento AS E ON A.IDEvento=E.IDEvento)
-            WHERE A.IDAgendamento=?
-        """, [agendamento_id])
+        # Mesmo problema de tipos da migração do Access: IDCliente/IDEvento
+        # em tblAgendamentos são texto, tblClientes.IDCliente e
+        # tblEvento.IDEvento são inteiros. JOIN direto quebra no
+        # PostgreSQL, então busca cada tabela separada e cruza em Python.
+        cur.execute("SELECT IDCliente, IDEvento FROM tblAgendamentos WHERE IDAgendamento=?", [agendamento_id])
         ag = cur.fetchone()
         if not ag:
             return jsonify({"ok": False, "erro": "Agendamento não encontrado."}), 404
-        cliente_id, evento_id, nome, evento, arquivo = access_int(ag[0]), access_int(ag[1]), str(ag[2] or ""), str(ag[3] or ""), str(ag[4] or "")
+        cliente_id, evento_id = access_int(ag[0]), access_int(ag[1])
+
+        cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=?", [cliente_id])
+        c = cur.fetchone()
+        nome = str(c[0] or "") if c else ""
+
+        cur.execute("SELECT NomeEvento, BalizamentoArquivo FROM tblEvento WHERE IDEvento=?", [evento_id])
+        e = cur.fetchone()
+        evento = str(e[0] or "") if e else ""
+        arquivo = str(e[1] or "") if e else ""
+
         cur.execute("""
             SELECT NumeroProva, NomeProva, NumeroSerie, Raia, NomeAtleta, Registro, Pagina
             FROM tblBalizamentoProvas
-            WHERE IDEvento=? AND NomeAtleta LIKE ?
+            WHERE IDEvento=? AND NomeAtleta ILIKE ?
             ORDER BY NumeroProva, NumeroSerie, Raia
         """, [evento_id, "%" + nome + "%"])
         result=[]
