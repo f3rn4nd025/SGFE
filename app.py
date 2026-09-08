@@ -3269,7 +3269,7 @@ def balizamento_agendamento(agendamento_id):
 
         ocorrencias.sort(key=lambda x: (access_int(x.get("prova")), access_int(x.get("serie")), access_int(x.get("raia"))))
 
-        return render_template("balizamento.html", info=info, evento=evento, ocorrencias=ocorrencias, marcadas=marcadas)
+        return render_template("balizamento.html", info=info, ocorrencias=ocorrencias, marcadas=marcadas)
     finally:
         conn.close()
 
