@@ -35,10 +35,10 @@ body{background:#05090a;color:#fff;font-family:Arial,sans-serif}.shell{max-width
 </head>
 <body><div class="shell">
 <div class="top"><div><div class="title">🏊 BALIZAMENTO</div><div class="muted"><b>{{ info.atleta }}</b> · {{ info.evento }} · {{ info.data_evento }}</div></div><div style="display:flex;gap:10px;align-items:center"><a class="btn no-print" href="/agendamentos">← VOLTAR</a></div></div>
+<div id="fg-aviso" class="fg-aviso no-print" style="width:100%;box-sizing:border-box;flex:1 1 100%;"></div>
 <div class="card">
 <div class="print-title"><div style="font-size:22px;font-weight:900;margin-bottom:4px">BALIZAMENTO COMPLETO + MARCAÇÕES</div><div style="font-size:13px;margin-bottom:12px"><b>{{ info.atleta }}</b> · {{ info.evento }} · {{ info.data_evento }}</div></div>
 <div class="print-note">As provas marcadas permanecem destacadas em amarelo/azul-claro. O balizamento completo é mantido para acompanhamento durante o evento.</div>
-<div id="fg-aviso" class="fg-aviso no-print"></div>
 <div class="bal-layout">
   <div class="table-wrap"><table class="table"><thead><tr><th>MARCAR</th><th>PROVA</th><th>SÉRIE</th><th>RAIA</th><th>ATLETA</th><th>SITUAÇÃO</th></tr></thead><tbody>
 {% for o in ocorrencias %}
