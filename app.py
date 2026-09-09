@@ -4132,6 +4132,49 @@ def agendamento_novo_atleta():
         conn.close()
 
 
+@app.route("/api/balizamento/debug-marcacoes/<int:evento_id>")
+def api_balizamento_debug_marcacoes(evento_id):
+    """Diagnóstico temporário: mostra todas as marcações (ativas e
+    desativadas) de balizamento para um evento, com o nome do cliente
+    de cada uma — pra investigar marcações que sumiram da impressão."""
+    nome_busca = request.args.get("nome", "").strip().upper()
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT M.IDMarcacao, M.IDCliente, C.Nome, M.NumeroProva,
+                   M.NumeroSerie, M.Raia, M.Cor, M.NomeProva, M.Ativa,
+                   M.DataMarcacao
+            FROM tblMarcacaoBalizamento AS M
+            LEFT JOIN tblClientes AS C ON M.IDCliente=C.IDCliente
+            WHERE M.IDEvento=?
+            ORDER BY M.NumeroProva, M.NumeroSerie, M.IDMarcacao
+        """, [evento_id])
+        linhas = cur.fetchall()
+        registros = []
+        for r in linhas:
+            nome_cliente = str(r[2] or "")
+            if nome_busca and nome_busca not in nome_cliente.upper():
+                continue
+            registros.append({
+                "id_marcacao": access_int(r[0]),
+                "id_cliente": access_int(r[1]),
+                "nome_cliente": nome_cliente,
+                "prova": access_int(r[3]), "serie": access_int(r[4]),
+                "raia": access_int(r[5]), "cor": str(r[6] or ""),
+                "nome_prova": str(r[7] or ""),
+                "ativa": bool(r[8]),
+                "data_marcacao": str(r[9] or "")
+            })
+        return jsonify({
+            "ok": True, "evento_id": evento_id, "filtro_nome": nome_busca,
+            "total_no_evento": len(linhas), "total_filtrado": len(registros),
+            "registros": registros[:50]
+        })
+    finally:
+        conn.close()
+
+
 @app.route("/api/historico/debug/<int:id_venda>")
 def api_historico_debug(id_venda):
     """Diagnóstico temporário: mostra exatamente o que está gravado pra
