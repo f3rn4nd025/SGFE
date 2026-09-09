@@ -4147,6 +4147,16 @@ def api_historico_debug(id_venda):
         cliente_direto = cur.fetchone() if cid else None
         resultado["cliente_via_IDCliente_direto"] = str(cliente_direto[1]) if cliente_direto else None
 
+        # Interpretação alternativa: se o IDCliente veio como um único
+        # caractere (ex.: '4'), o code point dele (ord('4')=52) também é
+        # testado, pra casos de registros migrados como byte cru.
+        if isinstance(venda[1], str) and len(venda[1]) == 1:
+            cid_alt = ord(venda[1])
+            resultado["venda_IDCliente_alt_ord"] = cid_alt
+            cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=?", [cid_alt])
+            cliente_alt = cur.fetchone()
+            resultado["cliente_via_IDCliente_alt_ord"] = str(cliente_alt[0]) if cliente_alt else None
+
         # Agendamento apontado pela própria venda (IDAgendamento).
         aid = access_int(venda[3]) if venda[3] is not None else 0
         resultado["venda_IDAgendamento_normalizado"] = aid
@@ -8209,6 +8219,17 @@ def web_historico():
             if aid:
                 agendamento_id_cliente_map[aid] = _num(r[1])
 
+        def _num_alt_ord(v):
+            """Interpretação alternativa: para um valor de texto de um único
+            caractere, o code point do caractere é o ID (ex.: '4' -> 52).
+            Usada só como ÚLTIMO recurso quando a interpretação normal
+            (dígito) não encontra nenhum cliente correspondente — porque
+            alguns registros de cliente bem antigos foram migrados como
+            byte cru, e não como texto numérico normal."""
+            if isinstance(v, str) and len(v) == 1:
+                return ord(v)
+            return 0
+
         def _resolver_cliente(venda_id_norm, cliente_id_raw, agendamento_id_raw=None):
             cid = _num(cliente_id_raw)
             info = cliente_map.get(cid)
@@ -8229,6 +8250,11 @@ def web_historico():
                     info3 = cliente_map.get(cid_ag2)
                     if info3 and info3["nome"]:
                         return info3
+            cid_alt = _num_alt_ord(cliente_id_raw)
+            if cid_alt:
+                info4 = cliente_map.get(cid_alt)
+                if info4 and info4["nome"]:
+                    return info4
             return {"nome": "", "telefone": "", "contato": ""}
 
         # Nomes de status (para excluir OS CANCELADA, mesmo critério das
