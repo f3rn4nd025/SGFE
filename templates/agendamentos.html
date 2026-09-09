@@ -451,13 +451,14 @@ function atualizarBotaoImpressaoBalizamento(){
   btn.title=sel.value?'Imprimir o balizamento completo deste evento, com as marcações':'Selecione um evento para imprimir o balizamento';
 }
 
-// Pré-seleciona o evento mais recente (primeira opção real da lista)
-// assim que a página carrega, pra o botão IMPRIMIR BALIZAMENTO já
-// nascer habilitado sem exigir que o usuário mexa nesse dropdown à toa.
+// Pré-seleciona o evento mais recente assim que a página carrega, pra o
+// botão IMPRIMIR BALIZAMENTO já nascer habilitado. A lista de eventos
+// vem ordenada por data CRESCENTE (mais antigo primeiro), então o mais
+// recente é a ÚLTIMA opção, não a primeira.
 document.addEventListener('DOMContentLoaded',function(){
   const sel=document.getElementById('balizamento_evento');
   if(sel && !sel.value && sel.options.length>1){
-    sel.selectedIndex=1;
+    sel.selectedIndex=sel.options.length-1;
   }
   atualizarBotaoImpressaoBalizamento();
 });
