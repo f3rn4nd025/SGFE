@@ -1708,9 +1708,12 @@ def _recalcular_cores_serie(cur, id_evento, numero_prova, numero_serie):
     """
     Recalcula a cor dos atletas marcados naquela PROVA + SÉRIE.
     A ordem da marcação é preservada pelo IDMarcacao.
+    Marcações com cor MANUAL (roxo/laranja, escolhidas explicitamente
+    pelo usuário) ficam de fora desse cálculo — não entram na
+    alternância automática amarelo/azul-claro e mantêm a cor escolhida.
     """
     cur.execute("""
-        SELECT IDMarcacao
+        SELECT IDMarcacao, Cor
         FROM tblMarcacaoBalizamento
         WHERE IDEvento=?
           AND NumeroProva=?
@@ -1719,15 +1722,18 @@ def _recalcular_cores_serie(cur, id_evento, numero_prova, numero_serie):
         ORDER BY IDMarcacao ASC
     """, [id_evento, numero_prova, numero_serie])
 
-    ids = [access_int(r[0]) for r in cur.fetchall()]
-
-    for pos, id_marcacao in enumerate(ids):
+    pos = 0
+    for id_marcacao_raw, cor_atual in cur.fetchall():
+        if str(cor_atual or "").strip().lower() in ("roxo", "laranja"):
+            continue
+        id_marcacao = access_int(id_marcacao_raw)
         cor = "amarelo" if pos == 0 else "azul-claro"
         cur.execute("""
             UPDATE tblMarcacaoBalizamento
             SET Cor=?
             WHERE IDMarcacao=?
         """, [cor, id_marcacao])
+        pos += 1
 
 
 def _balizamento_marcacoes_serie(cur, id_evento, numero_prova, numero_serie):
@@ -1985,6 +1991,14 @@ def api_balizamento_marcar():
             dados.get("nome_prova") or dados.get("prova_nome") or ""
         ).strip()
 
+        # Cor manual: se o usuário escolher explicitamente ROXO ou
+        # LARANJA (em vez de clicar no MARCAR padrão), essa cor é
+        # gravada direto e fica de fora do cálculo automático de
+        # amarelo (1º atleta)/azul-claro (2º atleta) da mesma série.
+        cor_escolhida = str(dados.get("cor") or "").strip().lower()
+        cor_manual = cor_escolhida in ("roxo", "laranja")
+        cor_inicial = cor_escolhida if cor_manual else "amarelo"
+
         if not id_evento or not id_cliente or not numero_prova or not numero_serie:
             return jsonify({
                 "ok": False,
@@ -2030,6 +2044,7 @@ def api_balizamento_marcar():
                     NomeProva=?,
                     NumeroSerie=?,
                     Raia=?,
+                    Cor=?,
                     DataMarcacao=Now(),
                     Ativa=True
                 WHERE IDMarcacao=?
@@ -2038,6 +2053,7 @@ def api_balizamento_marcar():
                 nome_prova,
                 numero_serie,
                 raia or None,
+                cor_inicial,
                 id_marcacao
             ])
         else:
@@ -2064,7 +2080,7 @@ def api_balizamento_marcar():
                 nome_prova,
                 numero_serie,
                 raia or None,
-                "amarelo"
+                cor_inicial
             ])
 
             cur.execute("SELECT @@IDENTITY")
@@ -2105,7 +2121,7 @@ def api_balizamento_marcar():
         return jsonify({
             "ok": True,
             "marcacao": atual,
-            "cor": atual["cor"] if atual else "amarelo",
+            "cor": atual["cor"] if atual else cor_inicial,
             "conflito": bool(outros),
             "mesma_serie": bool(outros),
             "quantidade": len(marcados),
@@ -3095,6 +3111,44 @@ def gerenciar_balizamento_evento(evento_id):
                 ])
                 proximo_id += 1
 
+            # -------------------------------------------------------
+            # RESYNC DE REBALIZAMENTO: quando a organização troca série
+            # e/ou raia de um atleta sem mudar o número da prova (o caso
+            # mais comum de rebalizamento em piscina), as marcações
+            # fotográficas já feitas são atualizadas automaticamente pra
+            # apontar pra posição nova — casando por PROVA + nome do
+            # atleta, não pela série/raia antiga (que pode ter mudado ou,
+            # pior, agora pertencer a outra pessoa).
+            cur.execute("""
+                SELECT M.IDMarcacao, M.NumeroProva, C.Nome
+                FROM tblMarcacaoBalizamento AS M
+                LEFT JOIN tblClientes AS C ON M.IDCliente=C.IDCliente
+                WHERE M.IDEvento=? AND M.Ativa=True
+            """, [evento_id])
+            marcacoes_ativas = cur.fetchall()
+
+            nova_posicao = {}
+            for item in registros:
+                chave = (access_int(item["prova"]), _normalizar_nome(item["nome_atleta"]))
+                nova_posicao.setdefault(chave, item)
+
+            resync_ok = 0
+            resync_nao_achou = 0
+            for mrow in marcacoes_ativas:
+                id_marcacao = access_int(mrow[0])
+                prova_antiga = access_int(mrow[1])
+                nome_atleta_norm = _normalizar_nome(mrow[2])
+                novo = nova_posicao.get((prova_antiga, nome_atleta_norm))
+                if novo:
+                    cur.execute("""
+                        UPDATE tblMarcacaoBalizamento
+                        SET NumeroSerie=?, Raia=?, NomeProva=?
+                        WHERE IDMarcacao=?
+                    """, [novo["serie"], novo["raia"], novo["nome_prova"], id_marcacao])
+                    resync_ok += 1
+                else:
+                    resync_nao_achou += 1
+
             antigo = evento[4] or ""
             antigo_caminho = ""
             try:
@@ -3120,6 +3174,13 @@ def gerenciar_balizamento_evento(evento_id):
             )
             if marcacoes_preservadas:
                 mensagem_importacao += f" {marcacoes_preservadas} marcação(ões) fotográfica(s) preservada(s)."
+            if resync_ok:
+                mensagem_importacao += f" {resync_ok} marcação(ões) reposicionada(s) automaticamente (série/raia atualizada)."
+            if resync_nao_achou:
+                mensagem_importacao += (
+                    f" ATENÇÃO: {resync_nao_achou} marcação(ões) não encontraram a mesma prova/atleta "
+                    "no novo balizamento e ficaram com a posição antiga — confira manualmente."
+                )
             return redirect(url_for("gerenciar_balizamento_evento", evento_id=evento_id, ok=mensagem_importacao))
 
         cur.execute("SELECT Count(*) FROM tblBalizamentoProvas WHERE IDEvento=?", [evento_id])
@@ -3368,7 +3429,7 @@ def imprimir_balizamento_evento(evento_id):
         doc = fitz.open(caminho_pdf)
 
         def encontrar_linha(page, atleta, serie, raia):
-            """Retorna o retângulo da linha original onde o atleta aparece."""
+            """Retorna (retângulo da linha inteira, retângulo só do nome)."""
             nome_norm = _normalizar_nome(atleta)
             words = page.get_text("words") or []
             linhas = {}
@@ -3399,18 +3460,45 @@ def imprimir_balizamento_evento(evento_id):
                 score = (2 if serie_ok else 0) + (2 if raia_ok else 0)
                 candidatos.append((score, min(z[1] for z in ws), ws))
 
-            if candidatos:
-                candidatos.sort(key=lambda x: (-x[0], x[1]))
-                ws = candidatos[0][2]
-                return fitz.Rect(
-                    min(z[0] for z in ws),
-                    min(z[1] for z in ws),
-                    max(z[2] for z in ws),
-                    max(z[3] for z in ws),
-                )
+            if not candidatos:
+                hits = page.search_for(str(atleta)) if atleta else []
+                rect_total = hits[0] if hits else None
+                return rect_total, rect_total
 
-            hits = page.search_for(str(atleta)) if atleta else []
-            return hits[0] if hits else None
+            candidatos.sort(key=lambda x: (-x[0], x[1]))
+            ws = candidatos[0][2]
+            rect_total = fitz.Rect(
+                min(z[0] for z in ws),
+                min(z[1] for z in ws),
+                max(z[2] for z in ws),
+                max(z[3] for z in ws),
+            )
+
+            # Acha a sequência exata de palavras que forma o nome do
+            # atleta dentro da linha, pra marcar só ali — não a linha
+            # toda (registro, ano, clube, tempo ficam de fora).
+            rect_nome = None
+            n = len(ws)
+            for i in range(n):
+                concat = ""
+                for j in range(i, n):
+                    trecho = _normalizar_nome(str(ws[j][4]))
+                    concat = (concat + " " + trecho).strip() if concat else trecho
+                    if concat == nome_norm:
+                        grupo = ws[i:j + 1]
+                        rect_nome = fitz.Rect(
+                            min(z[0] for z in grupo),
+                            min(z[1] for z in grupo),
+                            max(z[2] for z in grupo),
+                            max(z[3] for z in grupo),
+                        )
+                        break
+                    if len(concat) > len(nome_norm):
+                        break
+                if rect_nome:
+                    break
+
+            return rect_total, (rect_nome or rect_total)
 
         for m in marcacoes:
             atleta = str(m[2] or "").strip()
@@ -3430,21 +3518,28 @@ def imprimir_balizamento_evento(evento_id):
                 continue
 
             page = doc[idx]
-            rect = encontrar_linha(page, atleta, serie, raia)
-            if not rect:
+            rect_total, rect_nome = encontrar_linha(page, atleta, serie, raia)
+            if not rect_total:
                 continue
 
-            # Não recria a tabela. Apenas pinta discretamente a linha existente.
-            margem_y = max(2.0, min(5.0, rect.height * 0.35))
+            # Marca só a área do nome (com uma margem pequena nas
+            # laterais), não a linha inteira — registro, ano, clube e
+            # tempo ficam de fora da marcação.
+            margem_y = max(2.0, min(5.0, rect_nome.height * 0.35))
+            margem_x = 4.0
             faixa = fitz.Rect(
-                1,
-                max(0, rect.y0 - margem_y),
-                page.rect.width - 1,
-                min(page.rect.height, rect.y1 + margem_y),
+                max(0, rect_nome.x0 - margem_x),
+                max(0, rect_nome.y0 - margem_y),
+                min(page.rect.width - 1, rect_nome.x1 + margem_x),
+                min(page.rect.height, rect_nome.y1 + margem_y),
             )
 
             if cor == "azul-claro":
                 rgb = (0.35, 0.75, 0.95)
+            elif cor == "roxo":
+                rgb = (0.60, 0.35, 0.90)
+            elif cor == "laranja":
+                rgb = (1.00, 0.55, 0.15)
             else:
                 rgb = (1.00, 0.82, 0.10)
 
@@ -3457,15 +3552,6 @@ def imprimir_balizamento_evento(evento_id):
                 width=1.0,
                 stroke_opacity=0.75,
                 fill_opacity=0.18,
-                overlay=True,
-            )
-            page.draw_rect(
-                fitz.Rect(1, faixa.y0, 5, faixa.y1),
-                color=rgb,
-                fill=rgb,
-                width=0,
-                stroke_opacity=1,
-                fill_opacity=0.95,
                 overlay=True,
             )
 
