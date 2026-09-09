@@ -4249,9 +4249,12 @@ def venda_a_partir_do_agendamento(agendamento_id):
 
         status_nome = ""
         if a[4] is not None:
-            cur.execute("SELECT StatusAgendamento FROM tblStatusAgendamento WHERE IDStatusAgendamento=?", [access_int(a[4])])
-            s = cur.fetchone()
-            status_nome = str(s[0] or "") if s else ""
+            id_status = access_int(a[4])
+            cur.execute("SELECT IDStatusAgendamento, StatusAgendamento FROM tblStatusAgendamento")
+            for sr in cur.fetchall():
+                if access_int(sr[0]) == id_status:
+                    status_nome = str(sr[1] or "")
+                    break
 
         info = {
             "id": access_int(a[0]), "cliente_id": id_cliente, "cliente": str(c[0] or "") if c else "",
