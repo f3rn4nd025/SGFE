@@ -4567,8 +4567,11 @@ def web_vendas():
             return int.from_bytes(raw, byteorder="little", signed=False)
 
         if isinstance(v, str):
-            # IDs migrados como um único caractere: o code point é o ID.
-            # Ex.: '4'=52, '5'=53, '\\t'=9, '\\x1f'=31, 'ć'=263.
+            # IDs migrados como um único caractere não-numérico: o code
+            # point é o ID. Ex.: '\\t'=9, '\\x1f'=31, 'ć'=263. Um dígito
+            # puro ("4", "9"...) é tratado ANTES disso, como número normal.
+            if v.isdigit():
+                return int(v)
             if len(v) == 1:
                 return ord(v)
 
@@ -7031,6 +7034,8 @@ def web_entregas():
                         pass
                     return int.from_bytes(raw, byteorder='little', signed=False)
                 if isinstance(v, str):
+                    if v.isdigit():
+                        return int(v)
                     if len(v) == 1:
                         return ord(v)
                     s = v.strip()
@@ -7399,6 +7404,8 @@ def web_pagamentos_pendentes():
                     pass
                 return int.from_bytes(raw, byteorder="little", signed=False)
             if isinstance(v, str):
+                if v.isdigit():
+                    return int(v)
                 if len(v) == 1:
                     return ord(v)
                 s = v.strip()
@@ -7792,6 +7799,8 @@ def web_pagamentos():
                         pass
                     return int.from_bytes(raw, byteorder="little", signed=False)
                 if isinstance(v, str):
+                    if v.isdigit():
+                        return int(v)
                     if len(v) == 1:
                         return ord(v)
                     s = v.strip()
@@ -8059,6 +8068,8 @@ def web_historico():
                     pass
                 return int.from_bytes(raw, byteorder="little", signed=False)
             if isinstance(v, str):
+                if v.isdigit():
+                    return int(v)
                 if len(v) == 1:
                     return ord(v)
                 s = v.strip()
