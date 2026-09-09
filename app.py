@@ -1209,6 +1209,25 @@ def _ensure_status_venda_cancelado(conn):
     conn.commit()
 
 
+def _ensure_status_venda_cortesia(conn):
+    """Garante o status CORTESIA em tblStatusVenda — usado para vendas
+    cujo valor não deve entrar no fechamento financeiro (vendido/recebido/
+    em aberto)."""
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT TOP 1 IDStatusVenda
+        FROM tblStatusVenda
+        WHERE UCASE(StatusVenda)='CORTESIA'
+    """)
+    if cur.fetchone():
+        return
+    cur.execute("""
+        INSERT INTO tblStatusVenda (StatusVenda)
+        VALUES ('CORTESIA')
+    """)
+    conn.commit()
+
+
 def _ensure_status_agendamento_cancelado(conn):
     """Garante o status CANCELADO em tblStatusAgendamento."""
     cur = conn.cursor()
@@ -1530,6 +1549,7 @@ def get_connection():
     _log_postgres_status(conn)
     _ensure_status_pagamento(conn)
     _ensure_status_venda_cancelado(conn)
+    _ensure_status_venda_cortesia(conn)
     _ensure_status_agendamento_cancelado(conn)
     try:
         _ensure_event_balizamento_fields(conn)
@@ -4375,7 +4395,10 @@ def venda_a_partir_do_agendamento(agendamento_id):
         )
 
         cur.execute("SELECT IDStatusVenda,StatusVenda FROM tblStatusVenda ORDER BY IDStatusVenda")
-        status = [{"id": access_int(r[0]), "nome": r[1]} for r in cur.fetchall()]
+        status = [
+            {"id": access_int(r[0]), "nome": r[1]} for r in cur.fetchall()
+            if str(r[1] or "").strip().upper() != "CANCELADO"
+        ]
     finally:
         conn.close()
 
@@ -4521,6 +4544,14 @@ def nova_venda():
 
             if status_nome == "CANCELADO":
                 _cancelar_venda_operacional(cur, id_venda)
+            elif status_nome == "CORTESIA":
+                # Conecta ao mesmo mecanismo que a tela Histórico já usa
+                # pra excluir cortesias do fechamento financeiro (campo
+                # StatusPagamento, não IDStatusVenda).
+                cur.execute(
+                    "UPDATE tblVendaPacotes SET StatusPagamento='cortesia' WHERE IDVenda=?",
+                    [id_venda]
+                )
 
             conn.commit()
 
@@ -4532,6 +4563,11 @@ def nova_venda():
                 mensagem = (
                     f"OS {id_venda} criada e cancelada. "
                     "Pagamento não registrado e balizamento desmarcado."
+                )
+            elif status_nome == "CORTESIA":
+                mensagem = (
+                    f"OS {id_venda} criada como CORTESIA. "
+                    "Não entra no fechamento financeiro do evento."
                 )
 
             # Fluxo operacional: depois de salvar a venda originada do
@@ -4554,7 +4590,13 @@ def nova_venda():
             })
 
         cur.execute("SELECT IDStatusVenda,StatusVenda FROM tblStatusVenda ORDER BY IDStatusVenda")
-        status = [{"id": access_int(r[0]), "nome": r[1]} for r in cur.fetchall()]
+        # Mesmo filtro da tela de EDITAR VENDA: "CANCELADO" é técnico
+        # (usado pelo botão Cancelar Venda), oculto aqui pra não duplicar
+        # com "CANCELADA".
+        status = [
+            {"id": access_int(r[0]), "nome": r[1]} for r in cur.fetchall()
+            if str(r[1] or "").strip().upper() != "CANCELADO"
+        ]
 
     except Exception as e:
         try:
@@ -5828,6 +5870,10 @@ def editar_venda(id_venda):
 
             id_evento = access_int(venda[2])
 
+            cur.execute("SELECT StatusVenda FROM tblStatusVenda WHERE IDStatusVenda=?", [id_status])
+            status_row = cur.fetchone()
+            status_nome = str((status_row or [""])[0] or "").strip().upper()
+
             cur.execute("""
                 SELECT IDEvento, QtdProvas, Valor
                 FROM tblPrecoEvento
@@ -5869,6 +5915,28 @@ def editar_venda(id_venda):
                 qtd, valor_pacote, desconto, valor_final,
                 id_status, obs, id_venda
             ])
+
+            # Conecta ao mecanismo que a tela Histórico já usa pra excluir
+            # cortesias do fechamento financeiro (campo StatusPagamento).
+            # Se o status deixou de ser CORTESIA, também desfaz, pra não
+            # ficar uma venda "presa" como cortesia depois de reeditada.
+            if status_nome == "CORTESIA":
+                cur.execute(
+                    "UPDATE tblVendaPacotes SET StatusPagamento='cortesia' WHERE IDVenda=?",
+                    [id_venda]
+                )
+            else:
+                cur.execute(
+                    "SELECT StatusPagamento FROM tblVendaPacotes WHERE IDVenda=?",
+                    [id_venda]
+                )
+                sp_row = cur.fetchone()
+                if str((sp_row or [""])[0] or "").strip().lower() == "cortesia":
+                    cur.execute(
+                        "UPDATE tblVendaPacotes SET StatusPagamento=Null WHERE IDVenda=?",
+                        [id_venda]
+                    )
+
             conn.commit()
 
             mensagem = "Venda/OS atualizada com sucesso."
@@ -5916,9 +5984,15 @@ def editar_venda(id_venda):
             "SELECT IDStatusVenda, StatusVenda "
             "FROM tblStatusVenda ORDER BY IDStatusVenda"
         )
+        # "CANCELADO" é um status técnico usado internamente pelo botão
+        # Cancelar Venda (mesmo efeito de "CANCELADA", só que criado à
+        # parte). Como já existe "CANCELADA" nessa lista, "CANCELADO" fica
+        # oculto aqui pra não duplicar a opção no formulário — o cancelamento
+        # continua funcionando normalmente pelo botão próprio.
         status = [
             {"id": access_int(r[0]), "nome": str(r[1] or "")}
             for r in cur.fetchall()
+            if str(r[1] or "").strip().upper() != "CANCELADO"
         ]
 
         cur.execute(
