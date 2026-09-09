@@ -66,15 +66,19 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 .main > .new-card > form.grid{display:grid;grid-template-columns:minmax(280px,1.4fr) minmax(280px,1fr) minmax(180px,1fr);width:100%;box-sizing:border-box;}
 
 /* AGENDAMENTOS - PRIMEIRO AJUSTE: ENQUADRAR AÇÃO NA TELA
-   Não altera fonte nem tamanho dos botões. */
+   Não altera fonte nem tamanho dos botões.
+   Tabela tem 10 colunas: AGENDAMENTO, DATA, ATLETA, EVENTO, DATA EVENTO,
+   CIDADE, STATUS, OBSERVAÇÕES, AVISO, AÇÃO — a largura de cada nth-child
+   abaixo precisa bater com essa ordem exata. */
 .table-wrap.agendamentos-wrap {
     width: 100%;
     max-width: 100%;
-    overflow-x: hidden;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 .table.agendamentos-table {
     width: 100% !important;
-    min-width: 0 !important;
+    min-width: 980px !important;
     table-layout: fixed !important;
 }
 .table.agendamentos-table th,
@@ -84,29 +88,31 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
     padding-right: 4px !important;
 }
 .table.agendamentos-table th:nth-child(1),
-.table.agendamentos-table td:nth-child(1) { width: 7%; }
+.table.agendamentos-table td:nth-child(1) { width: 6%; }
 .table.agendamentos-table th:nth-child(2),
-.table.agendamentos-table td:nth-child(2) { width: 9%; }
+.table.agendamentos-table td:nth-child(2) { width: 7%; }
 .table.agendamentos-table th:nth-child(3),
-.table.agendamentos-table td:nth-child(3) { width: 13%; }
+.table.agendamentos-table td:nth-child(3) { width: 11%; }
 .table.agendamentos-table th:nth-child(4),
-.table.agendamentos-table td:nth-child(4) { width: 12%; }
+.table.agendamentos-table td:nth-child(4) { width: 11%; }
 .table.agendamentos-table th:nth-child(5),
-.table.agendamentos-table td:nth-child(5) { width: 10%; }
+.table.agendamentos-table td:nth-child(5) { width: 8%; }
 .table.agendamentos-table th:nth-child(6),
-.table.agendamentos-table td:nth-child(6) { width: 8%; }
+.table.agendamentos-table td:nth-child(6) { width: 7%; }
 .table.agendamentos-table th:nth-child(7),
-.table.agendamentos-table td:nth-child(7) { width: 8%; }
+.table.agendamentos-table td:nth-child(7) { width: 7%; }
 .table.agendamentos-table th:nth-child(8),
-.table.agendamentos-table td:nth-child(8) { width: 6%; }
+.table.agendamentos-table td:nth-child(8) { width: 15%; }
 .table.agendamentos-table th:nth-child(9),
-.table.agendamentos-table td:nth-child(9) { width: 27%; }
+.table.agendamentos-table td:nth-child(9) { width: 8%; }
+.table.agendamentos-table th:nth-child(10),
+.table.agendamentos-table td:nth-child(10) { width: 20%; }
 
-.table.agendamentos-table td:nth-child(9) {
+.table.agendamentos-table td:nth-child(10) {
     overflow: visible !important;
     white-space: nowrap !important;
 }
-.table.agendamentos-table td:nth-child(9) .row-action {
+.table.agendamentos-table td:nth-child(10) .row-action {
     margin-right: 3px;
 }
 
