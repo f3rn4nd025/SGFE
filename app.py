@@ -4112,6 +4112,76 @@ def agendamento_novo_atleta():
         conn.close()
 
 
+@app.route("/api/historico/debug/<int:id_venda>")
+def api_historico_debug(id_venda):
+    """Diagnóstico temporário: mostra exatamente o que está gravado pra
+    uma OS específica em tblVendaPacotes e o(s) agendamento(s) ligado(s)
+    a ela, pra investigar por que o nome do atleta não resolve."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT IDVenda, IDCliente, IDEvento, IDAgendamento
+            FROM tblVendaPacotes
+        """)
+        venda = None
+        for r in cur.fetchall():
+            if access_int(r[0]) == id_venda:
+                venda = r
+                break
+
+        resultado = {"id_venda": id_venda, "venda_encontrada": venda is not None}
+        if not venda:
+            return jsonify(resultado)
+
+        resultado["venda_IDCliente_raw"] = repr(venda[1])
+        resultado["venda_IDCliente_tipo"] = type(venda[1]).__name__
+        resultado["venda_IDEvento_raw"] = repr(venda[2])
+        resultado["venda_IDAgendamento_raw"] = repr(venda[3])
+        resultado["venda_IDAgendamento_tipo"] = type(venda[3]).__name__
+
+        # Cliente pelo IDCliente gravado na venda.
+        cid = access_int(venda[1]) if venda[1] is not None else 0
+        resultado["venda_IDCliente_normalizado"] = cid
+        cur.execute("SELECT IDCliente, Nome FROM tblClientes WHERE IDCliente=?", [cid]) if cid else None
+        cliente_direto = cur.fetchone() if cid else None
+        resultado["cliente_via_IDCliente_direto"] = str(cliente_direto[1]) if cliente_direto else None
+
+        # Agendamento apontado pela própria venda (IDAgendamento).
+        aid = access_int(venda[3]) if venda[3] is not None else 0
+        resultado["venda_IDAgendamento_normalizado"] = aid
+        agendamento_direto = None
+        if aid:
+            cur.execute("SELECT IDAgendamento, IDCliente FROM tblAgendamentos WHERE IDAgendamento=?", [aid])
+            agendamento_direto = cur.fetchone()
+        resultado["agendamento_via_IDAgendamento_encontrado"] = agendamento_direto is not None
+        if agendamento_direto:
+            resultado["agendamento_IDCliente_raw"] = repr(agendamento_direto[1])
+            cid2 = access_int(agendamento_direto[1]) if agendamento_direto[1] is not None else 0
+            cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=?", [cid2]) if cid2 else None
+            cliente2 = cur.fetchone() if cid2 else None
+            resultado["cliente_via_agendamento_IDAgendamento"] = str(cliente2[0]) if cliente2 else None
+
+        # Agendamento cujo IDVendas aponta de volta pra essa venda.
+        cur.execute("SELECT IDAgendamento, IDVendas, IDCliente FROM tblAgendamentos")
+        agendamento_reverso = None
+        for r in cur.fetchall():
+            if access_int(r[1]) == id_venda:
+                agendamento_reverso = r
+                break
+        resultado["agendamento_via_IDVendas_reverso_encontrado"] = agendamento_reverso is not None
+        if agendamento_reverso:
+            resultado["agendamento_reverso_IDCliente_raw"] = repr(agendamento_reverso[2])
+            cid3 = access_int(agendamento_reverso[2]) if agendamento_reverso[2] is not None else 0
+            cur.execute("SELECT Nome FROM tblClientes WHERE IDCliente=?", [cid3]) if cid3 else None
+            cliente3 = cur.fetchone() if cid3 else None
+            resultado["cliente_via_IDVendas_reverso"] = str(cliente3[0]) if cliente3 else None
+
+        return jsonify(resultado)
+    finally:
+        conn.close()
+
+
 @app.route("/api/balizamento/debug/<int:evento_id>")
 def api_balizamento_debug(evento_id):
     """Diagnóstico temporário: mostra o que ficou gravado no balizamento
