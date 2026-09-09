@@ -5,7 +5,7 @@
 <title>Balizamento do Atleta | SGFE WEB</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 <style>
-body{background:#05090a;color:#fff;font-family:Arial,sans-serif}.shell{max-width:1400px;margin:auto;padding:18px}.top{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:18px}.title{font-size:28px;font-weight:900}.muted{color:#819596;font-size:12px}.card{border:1px solid #123f41;background:linear-gradient(145deg,#0a1112,#050809);border-radius:12px;padding:18px;margin-bottom:16px}.btn{display:inline-block;background:#0b5b5e;border:1px solid #12d8de;color:#fff;border-radius:7px;padding:10px 14px;font-weight:900;text-decoration:none;cursor:pointer}.btn-confirm{background:#116b55;border-color:#18d99a}.btn-mark{background:#7b6710;border-color:#f5d547;color:#fff}.btn-unmark{background:#243335;border-color:#70898b;color:#fff}.fg-aviso{display:none;width:100%;box-sizing:border-box;float:none;position:static;padding:12px;border-radius:9px;margin-bottom:12px}.fg-aviso.show{display:block}.fg-aviso.conflict{background:#1d1a08;border:1px solid #f5d547}.fg-aviso.ok{background:#09251f;border:1px solid #16c784}.fg-aviso.err{background:#250d0d;border:1px solid #d9534f}.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}.table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0}.table th,.table td{padding:8px 8px;border-bottom:1px solid #123638;text-align:left;font-size:11px;vertical-align:middle}.table th{color:#7d9798;font-size:9px;text-transform:uppercase}.table th:nth-child(1),.table td:nth-child(1){width:90px}.table th:nth-child(2),.table td:nth-child(2){width:auto;padding-left:32px}.table th:nth-child(3),.table td:nth-child(3){width:55px}.table th:nth-child(4),.table td:nth-child(4){width:50px}.table th:nth-child(5),.table td:nth-child(5){width:170px;white-space:nowrap;font-size:10px;padding-left:20px}.table th:nth-child(6),.table td:nth-child(6){width:105px}.table td:nth-child(2){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row{transition:.15s}.row.marked-yellow{background:#4b4210}.row.marked-blue{background:#21485b}.cor{display:inline-block;padding:4px 8px;border-radius:12px;font-weight:900}.yellow{background:#e6cf31;color:#171700}.blue{background:#86c9e8;color:#06202b}.bal-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}.bal-right{display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:14px;padding:8px 0}.legend{display:flex;flex-direction:column;gap:8px;margin:0;font-size:10px}.legend-item{display:grid;grid-template-columns:82px 1fr;gap:8px;align-items:center}.legend-item span:last-child{color:#b5c6c7;line-height:1.2}.legend-item .cor{font-size:10px;text-align:center;padding:4px 5px}.confirm-wrap{display:flex;justify-content:center}.confirm-wrap .btn-confirm{width:100%;text-align:center;padding:11px 10px}.fg-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;align-items:center;justify-content:center}.fg-modal-overlay.show{display:flex}.fg-modal-caixa{background:linear-gradient(145deg,#0a1112,#050809);border:1px solid #12d8de;border-radius:12px;padding:24px;max-width:380px;width:90%;text-align:center}.fg-modal-titulo{font-size:18px;font-weight:900;letter-spacing:.5px;margin-bottom:14px}.fg-modal-titulo span{color:#12d8de}.fg-modal-msg{font-size:13px;color:#c7d6d7;margin-bottom:20px;line-height:1.4}.fg-modal-botoes{display:flex;gap:10px;justify-content:center}.fg-modal-cancelar{background:transparent;border:1px solid #4a6567}@media(max-width:1050px){.bal-layout{grid-template-columns:1fr}.bal-right{padding:0}.table{min-width:0}.table th:nth-child(5),.table td:nth-child(5){display:none}}
+body{background:#05090a;color:#fff;font-family:Arial,sans-serif}.shell{max-width:1400px;margin:auto;padding:18px}.top{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:18px}.title{font-size:28px;font-weight:900}.muted{color:#819596;font-size:12px}.card{border:1px solid #123f41;background:linear-gradient(145deg,#0a1112,#050809);border-radius:12px;padding:18px;margin-bottom:16px}.btn{display:inline-block;background:#0b5b5e;border:1px solid #12d8de;color:#fff;border-radius:7px;padding:10px 14px;font-weight:900;text-decoration:none;cursor:pointer}.btn-confirm{background:#116b55;border-color:#18d99a}.btn-mark{background:#7b6710;border-color:#f5d547;color:#fff}.btn-unmark{background:#243335;border-color:#70898b;color:#fff}.fg-aviso{display:none;width:100%;box-sizing:border-box;float:none;position:static;padding:12px;border-radius:9px;margin-bottom:12px}.fg-aviso.show{display:block}.fg-aviso.conflict{background:#1d1a08;border:1px solid #f5d547}.fg-aviso.ok{background:#09251f;border:1px solid #16c784}.fg-aviso.err{background:#250d0d;border:1px solid #d9534f}.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}.table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:0}.table th,.table td{padding:8px 8px;border-bottom:1px solid #123638;text-align:left;font-size:11px;vertical-align:middle}.table th{color:#7d9798;font-size:9px;text-transform:uppercase}.table th:nth-child(1),.table td:nth-child(1){width:90px}.table th:nth-child(2),.table td:nth-child(2){width:auto;padding-left:32px}.table th:nth-child(3),.table td:nth-child(3){width:55px}.table th:nth-child(4),.table td:nth-child(4){width:50px}.table th:nth-child(5),.table td:nth-child(5){width:170px;white-space:nowrap;font-size:10px;padding-left:20px}.table th:nth-child(6),.table td:nth-child(6){width:105px}.table td:nth-child(2){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row{transition:.15s}.row.marked-yellow{background:#4b4210}.row.marked-blue{background:#21485b}.row.marked-purple{background:#3a1f52}.row.marked-orange{background:#4d2c10}.cor{display:inline-block;padding:4px 8px;border-radius:12px;font-weight:900}.yellow{background:#e6cf31;color:#171700}.blue{background:#86c9e8;color:#06202b}.purple{background:#b083f2;color:#1f0f38}.orange{background:#ffab5c;color:#3a1c00}.mark-group{display:flex;gap:5px;align-items:center}.btn-swatch{padding:8px 9px;font-size:13px;min-width:0;line-height:1}.btn-swatch.roxo{background:#5a2f8a;border-color:#b083f2}.btn-swatch.laranja{background:#8a4d10;border-color:#ffab5c}.bal-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}.bal-right{display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:14px;padding:8px 0}.legend{display:flex;flex-direction:column;gap:8px;margin:0;font-size:10px}.legend-item{display:grid;grid-template-columns:82px 1fr;gap:8px;align-items:center}.legend-item span:last-child{color:#b5c6c7;line-height:1.2}.legend-item .cor{font-size:10px;text-align:center;padding:4px 5px}.confirm-wrap{display:flex;justify-content:center}.confirm-wrap .btn-confirm{width:100%;text-align:center;padding:11px 10px}.fg-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;align-items:center;justify-content:center}.fg-modal-overlay.show{display:flex}.fg-modal-caixa{background:linear-gradient(145deg,#0a1112,#050809);border:1px solid #12d8de;border-radius:12px;padding:24px;max-width:380px;width:90%;text-align:center}.fg-modal-titulo{font-size:18px;font-weight:900;letter-spacing:.5px;margin-bottom:14px}.fg-modal-titulo span{color:#12d8de}.fg-modal-msg{font-size:13px;color:#c7d6d7;margin-bottom:20px;line-height:1.4}.fg-modal-botoes{display:flex;gap:10px;justify-content:center}.fg-modal-cancelar{background:transparent;border:1px solid #4a6567}@media(max-width:1050px){.bal-layout{grid-template-columns:1fr}.bal-right{padding:0}.table{min-width:0}.table th:nth-child(5),.table td:nth-child(5){display:none}}
 @media(max-width:650px){.table th,.table td{padding:7px 6px}.table th:nth-child(1),.table td:nth-child(1){width:78px}}
 
 @media print{
@@ -24,9 +24,13 @@ body{background:#05090a;color:#fff;font-family:Arial,sans-serif}.shell{max-width
   .table td:nth-child(2){white-space:normal;overflow:visible;text-overflow:clip}
   .row.marked-yellow{background:#fff3a6!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .row.marked-blue{background:#c7e9f7!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .row.marked-purple{background:#e3d1fb!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .row.marked-orange{background:#ffd9b3!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .cor{border:1px solid #777;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .yellow{background:#e6cf31!important;color:#171700!important}
   .blue{background:#86c9e8!important;color:#06202b!important}
+  .purple{background:#b083f2!important;color:#1f0f38!important}
+  .orange{background:#ffab5c!important;color:#3a1c00!important}
   .print-title{display:block!important}
   .print-note{display:block!important;font-size:10px;color:#444;margin:-4px 0 10px 0}
 }
@@ -43,10 +47,22 @@ body{background:#05090a;color:#fff;font-family:Arial,sans-serif}.shell{max-width
 <div class="bal-layout">
   <div class="table-wrap"><table class="table"><thead><tr><th>MARCAR</th><th>PROVA</th><th>SÉRIE</th><th>RAIA</th><th>ATLETA</th><th>SITUAÇÃO</th></tr></thead><tbody>
 {% for o in ocorrencias %}
-<tr class="row {% if o.marcada and o.marcacao.cor == 'amarelo' %}marked-yellow{% elif o.marcada and o.marcacao.cor == 'azul-claro' %}marked-blue{% endif %}" id="row-{{ o.prova }}-{{ o.serie }}">
-<td><button class="btn {% if o.marcada %}btn-unmark{% else %}btn-mark{% endif %}" data-prova="{{ o.prova }}" data-serie="{{ o.serie }}" data-raia="{{ o.raia }}" data-nome="{{ o.nome_prova|e }}" data-row="row-{{ o.prova }}-{{ o.serie }}" data-marcacao-id="{{ o.marcacao.id_marcacao if o.marcada else '' }}" onclick="alternarMarcacao(this)">{% if o.marcada %}✓ MARCADO{% else %}MARCAR{% endif %}</button></td>
+{% set corclasse = {'amarelo':'marked-yellow','azul-claro':'marked-blue','roxo':'marked-purple','laranja':'marked-orange'} %}
+{% set corbadge = {'amarelo':('yellow','AMARELO'),'azul-claro':('blue','AZUL-CLARO'),'roxo':('purple','ROXO'),'laranja':('orange','LARANJA')} %}
+<tr class="row {{ corclasse.get(o.marcacao.cor) if o.marcada else '' }}" id="row-{{ o.prova }}-{{ o.serie }}">
+<td>
+{% if o.marcada %}
+<button class="btn btn-unmark" data-prova="{{ o.prova }}" data-serie="{{ o.serie }}" data-raia="{{ o.raia }}" data-nome="{{ o.nome_prova|e }}" data-row="row-{{ o.prova }}-{{ o.serie }}" data-marcacao-id="{{ o.marcacao.id_marcacao }}" onclick="alternarMarcacao(this)">✓ MARCADO</button>
+{% else %}
+<div class="mark-group">
+<button class="btn btn-mark" data-prova="{{ o.prova }}" data-serie="{{ o.serie }}" data-raia="{{ o.raia }}" data-nome="{{ o.nome_prova|e }}" data-row="row-{{ o.prova }}-{{ o.serie }}" data-marcacao-id="" onclick="alternarMarcacao(this)">MARCAR</button>
+<button class="btn btn-swatch roxo" title="Marcar como ROXO (cor forçada)" data-prova="{{ o.prova }}" data-serie="{{ o.serie }}" data-raia="{{ o.raia }}" data-nome="{{ o.nome_prova|e }}" data-row="row-{{ o.prova }}-{{ o.serie }}" data-marcacao-id="" onclick="alternarMarcacao(this,'roxo')">🟣</button>
+<button class="btn btn-swatch laranja" title="Marcar como LARANJA (cor forçada)" data-prova="{{ o.prova }}" data-serie="{{ o.serie }}" data-raia="{{ o.raia }}" data-nome="{{ o.nome_prova|e }}" data-row="row-{{ o.prova }}-{{ o.serie }}" data-marcacao-id="" onclick="alternarMarcacao(this,'laranja')">🟠</button>
+</div>
+{% endif %}
+</td>
 <td>{{ o.prova }}ª · {{ o.nome_prova }}</td><td>{{ o.serie }}ª</td><td>{{ o.raia or '-' }}</td><td>{{ o.nome_atleta }}</td>
-<td id="sit-{{ o.prova }}-{{ o.serie }}">{% if o.marcada %}<span class="cor {% if o.marcacao.cor == 'amarelo' %}yellow{% else %}blue{% endif %}">{{ 'AMARELO' if o.marcacao.cor == 'amarelo' else 'AZUL-CLARO' }}</span>{% else %}não marcada{% endif %}</td>
+<td id="sit-{{ o.prova }}-{{ o.serie }}">{% if o.marcada %}{% set b=corbadge.get(o.marcacao.cor,('yellow','AMARELO')) %}<span class="cor {{ b[0] }}">{{ b[1] }}</span>{% else %}não marcada{% endif %}</td>
 </tr>
 {% endfor %}
 </tbody></table></div>
@@ -54,6 +70,8 @@ body{background:#05090a;color:#fff;font-family:Arial,sans-serif}.shell{max-width
     <div class="legend">
       <div class="legend-item"><span class="cor yellow">AMARELO</span><span>1º atleta seu<br>na prova + série</span></div>
       <div class="legend-item"><span class="cor blue">AZUL-CLARO</span><span>2º atleta seu<br>na mesma prova + série</span></div>
+      <div class="legend-item"><span class="cor purple">ROXO</span><span>Cor forçada manualmente<br>(clique no 🟣)</span></div>
+      <div class="legend-item"><span class="cor orange">LARANJA</span><span>Cor forçada manualmente<br>(clique no 🟠)</span></div>
     </div>
     <div class="confirm-wrap"><button class="btn btn-confirm" onclick="confirmarProvas()">✓ CONFIRMAR PROVAS E IR PARA VENDA</button></div>
     
@@ -101,8 +119,18 @@ Object.keys(marcadasInicial||{}).forEach(k=>selecionadas.add(String(k)));
 function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function atualizarContador(){}
 function aviso(txt,tipo){const n=document.getElementById('fg-aviso');n.className='fg-aviso show '+tipo;n.innerHTML=txt;window.scrollTo({top:0,behavior:'smooth'});}
-function pintar(rowId,cor,marcado){const row=document.getElementById(rowId);if(!row)return;row.classList.remove('marked-yellow','marked-blue');if(marcado)row.classList.add(cor==='amarelo'?'marked-yellow':'marked-blue');}
-async function alternarMarcacao(btn){
+function pintar(rowId,cor,marcado){
+ const row=document.getElementById(rowId);if(!row)return;
+ row.classList.remove('marked-yellow','marked-blue','marked-purple','marked-orange');
+ if(marcado){
+  const classe={'amarelo':'marked-yellow','azul-claro':'marked-blue','roxo':'marked-purple','laranja':'marked-orange'}[cor]||'marked-yellow';
+  row.classList.add(classe);
+ }
+}
+function badgeCor(cor){
+ return {'amarelo':['yellow','AMARELO'],'azul-claro':['blue','AZUL-CLARO'],'roxo':['purple','ROXO'],'laranja':['orange','LARANJA']}[cor]||['yellow','AMARELO'];
+}
+async function alternarMarcacao(btn,corForcada){
  const prova=Number(btn.dataset.prova), serie=Number(btn.dataset.serie), raia=Number(btn.dataset.raia), nome=btn.dataset.nome, rowId=btn.dataset.row;
  const marcada=btn.classList.contains('btn-unmark');
  if(marcada){
@@ -114,7 +142,12 @@ async function alternarMarcacao(btn){
    const r=await fetch('/api/balizamento/desmarcar/'+idMarcacao,{method:'POST'});
    const d=await r.json(); if(!r.ok||!d.ok){aviso('❌ '+(d.erro||'Não foi possível desmarcar.'),'err');return;}
    selecionadas.delete(String(prova));
-   btn.className='btn btn-mark';btn.innerText='MARCAR';btn.dataset.marcacaoId='';
+   const row=document.getElementById(rowId);
+   row.querySelector('td').innerHTML='<div class="mark-group">'
+     +'<button class="btn btn-mark" data-prova="'+prova+'" data-serie="'+serie+'" data-raia="'+raia+'" data-nome="'+esc(nome)+'" data-row="'+rowId+'" data-marcacao-id="" onclick="alternarMarcacao(this)">MARCAR</button>'
+     +'<button class="btn btn-swatch roxo" title="Marcar como ROXO (cor forçada)" data-prova="'+prova+'" data-serie="'+serie+'" data-raia="'+raia+'" data-nome="'+esc(nome)+'" data-row="'+rowId+'" data-marcacao-id="" onclick="alternarMarcacao(this,\'roxo\')">🟣</button>'
+     +'<button class="btn btn-swatch laranja" title="Marcar como LARANJA (cor forçada)" data-prova="'+prova+'" data-serie="'+serie+'" data-raia="'+raia+'" data-nome="'+esc(nome)+'" data-row="'+rowId+'" data-marcacao-id="" onclick="alternarMarcacao(this,\'laranja\')">🟠</button>'
+     +'</div>';
    pintar(rowId,'',false);
    const sit=document.getElementById('sit-'+prova+'-'+serie);sit.innerHTML='não marcada';
    aviso('↩️ Prova desmarcada.','ok');
@@ -123,13 +156,20 @@ async function alternarMarcacao(btn){
   return;
  }
  try{
-  const r=await fetch('/api/balizamento/marcar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({evento:EVENTO,cliente:CLIENTE,agendamento:AG,prova,serie,raia,nome_prova:nome})});
+  const corpo={evento:EVENTO,cliente:CLIENTE,agendamento:AG,prova,serie,raia,nome_prova:nome};
+  if(corForcada) corpo.cor=corForcada;
+  const r=await fetch('/api/balizamento/marcar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
   const d=await r.json(); if(!r.ok||!d.ok){aviso('❌ '+(d.erro||'Não foi possível marcar.'),'err');return;}
   selecionadas.add(String(prova));
-  btn.className='btn btn-unmark';btn.innerText='✓ MARCADO';btn.dataset.marcacaoId=d.marcacao?.id_marcacao||d.id_marcacao||'';
+  const row=document.getElementById(rowId);
+  row.querySelector('td').innerHTML='<button class="btn btn-unmark" data-prova="'+prova+'" data-serie="'+serie+'" data-raia="'+raia+'" data-nome="'+esc(nome)+'" data-row="'+rowId+'" data-marcacao-id="'+(d.marcacao?.id_marcacao||d.id_marcacao||'')+'" onclick="alternarMarcacao(this)">✓ MARCADO</button>';
   pintar(rowId,d.cor,true);
-  const sit=document.getElementById('sit-'+prova+'-'+serie);sit.innerHTML='<span class="cor '+(d.cor==='amarelo'?'yellow':'blue')+'">'+(d.cor==='amarelo'?'AMARELO':'AZUL-CLARO')+'</span>';
-  if(d.conflito){
+  const sit=document.getElementById('sit-'+prova+'-'+serie);
+  const b=badgeCor(d.cor);
+  sit.innerHTML='<span class="cor '+b[0]+'">'+b[1]+'</span>';
+  if(corForcada){
+    aviso('✅ Prova marcada com cor forçada ('+b[1]+').','ok');
+  }else if(d.conflito){
     const nomes=(d.outros_atletas||[]).map(x=>'🟨 '+esc(x.atleta)+' · raia '+x.raia).join('<br>');
     aviso('⚠️ <b>ATENÇÃO: ESTA SÉRIE JÁ POSSUI ATLETA MARCADO</b><br><br>'+nomes+'<br><br>Você pode manter os dois. Este atleta recebeu <b>AZUL-CLARO</b>.','conflict');
   }else aviso('🟨 Prova marcada. Série disponível.','ok');
@@ -137,7 +177,7 @@ async function alternarMarcacao(btn){
  }catch(e){aviso('❌ Erro ao marcar: '+e,'err');}
 }
 function imprimirBalizamento(){
- const marcadas=document.querySelectorAll('.row.marked-yellow,.row.marked-blue');
+ const marcadas=document.querySelectorAll('.row.marked-yellow,.row.marked-blue,.row.marked-purple,.row.marked-orange');
  if(!marcadas.length){
    aviso('⚠️ Marque pelo menos uma prova antes de imprimir.','err');
    return;
