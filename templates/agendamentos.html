@@ -269,7 +269,9 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 <td>
 {% if r.Telefone %}
 <a class="row-action whatsapp" target="_blank" rel="noopener"
-href="https://wa.me/{{ r.Telefone|replace('(','')|replace(')','')|replace('-','')|replace(' ','')|replace('+','') }}?text={{ ('Olá, ' ~ (r.Contato or r.Atleta) ~ '!\n\nTudo bem?\n\nO balizamento do evento ' ~ r.Evento ~ ' já está disponível!\n\nAgora precisamos definir a quantidade e quais provas ' ~ (('a atleta ' if (r.Sexo or '')|upper in ['F','FEMININO','FEMININA'] else 'o atleta ') ~ r.Atleta) ~ ' irá disputar para finalizarmos a contratação da cobertura fotográfica.\n\nAssim que você me passar essas informações, verifico a disponibilidade, calculo o valor do pacote e já deixamos tudo organizado para o evento.\n\nQualquer dúvida, estou à disposição.\n\nFernando - Fotografia Esportiva')|urlencode }}">WHATSAPP</a>
+{% set tel_limpo = r.Telefone|replace('(','')|replace(')','')|replace('-','')|replace(' ','')|replace('+','') %}
+{% set tel_wa = ('55' ~ tel_limpo) if (tel_limpo|length <= 11) else tel_limpo %}
+href="https://wa.me/{{ tel_wa }}?text={{ ('Olá, ' ~ (r.Contato or r.Atleta) ~ '!\n\nTudo bem?\n\nO balizamento do evento ' ~ r.Evento ~ ' já está disponível!\n\nAgora precisamos definir a quantidade e quais provas ' ~ (('a atleta ' if (r.Sexo or '')|upper in ['F','FEMININO','FEMININA'] else 'o atleta ') ~ r.Atleta) ~ ' irá disputar para finalizarmos a contratação da cobertura fotográfica.\n\nAssim que você me passar essas informações, verifico a disponibilidade, calculo o valor do pacote e já deixamos tudo organizado para o evento.\n\nQualquer dúvida, estou à disposição.\n\nFernando - Fotografia Esportiva')|urlencode }}">WHATSAPP</a>
 {% else %}
 <span class="row-action wa-disabled">SEM TELEFONE</span>
 {% endif %}
