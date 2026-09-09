@@ -8127,7 +8127,19 @@ def web_historico():
             if idv:
                 agendamento_venda_cliente_map[idv] = _num(r[1])
 
-        def _resolver_cliente(venda_id_norm, cliente_id_raw):
+        # Segundo vínculo, na direção oposta: a própria venda guarda
+        # IDAgendamento (setado na hora em que a venda nasce do
+        # agendamento). Em alguns registros antigos só um dos dois
+        # vínculos (VENDA.IDAgendamento ou AGENDAMENTO.IDVendas) ficou
+        # gravado corretamente — por isso os dois são tentados.
+        cur.execute("SELECT IDAgendamento, IDCliente FROM tblAgendamentos")
+        agendamento_id_cliente_map = {}
+        for r in cur.fetchall():
+            aid = _num(r[0])
+            if aid:
+                agendamento_id_cliente_map[aid] = _num(r[1])
+
+        def _resolver_cliente(venda_id_norm, cliente_id_raw, agendamento_id_raw=None):
             cid = _num(cliente_id_raw)
             info = cliente_map.get(cid)
             if info and info["nome"]:
@@ -8140,6 +8152,13 @@ def web_historico():
                 info2 = cliente_map.get(cid_ag)
                 if info2 and info2["nome"]:
                     return info2
+            if agendamento_id_raw is not None:
+                aid_norm = _num(agendamento_id_raw)
+                cid_ag2 = agendamento_id_cliente_map.get(aid_norm)
+                if cid_ag2:
+                    info3 = cliente_map.get(cid_ag2)
+                    if info3 and info3["nome"]:
+                        return info3
             return {"nome": "", "telefone": "", "contato": ""}
 
         # Nomes de status (para excluir OS CANCELADA, mesmo critério das
@@ -8183,7 +8202,7 @@ def web_historico():
         resolved_rows = []
         for r in vendas_evento:
             id_venda = access_int(r[0])
-            cli = _resolver_cliente(id_venda, r[2])
+            cli = _resolver_cliente(id_venda, r[2], r[12])
             evento_id_norm = access_int(r[3])
             evento_info = evento_map.get(evento_id_norm, {})
             valor = float(r[7] or 0)
