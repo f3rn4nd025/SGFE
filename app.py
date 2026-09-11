@@ -3525,7 +3525,7 @@ def imprimir_balizamento_evento(evento_id):
             # Marca só a área do nome (com uma margem pequena nas
             # laterais), não a linha inteira — registro, ano, clube e
             # tempo ficam de fora da marcação.
-            margem_y = max(2.0, min(5.0, rect_nome.height * 0.35))
+            margem_y = max(0.5, min(1.5, rect_nome.height * 0.12))
             margem_x = 4.0
             faixa = fitz.Rect(
                 max(0, rect_nome.x0 - margem_x),
