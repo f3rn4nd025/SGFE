@@ -5841,6 +5841,23 @@ html, body{
                     a.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:92px;height:38px;padding:0 14px;margin:0;box-sizing:border-box;';
                     td.appendChild(a);
                 }
+
+                /* O botão do WhatsApp (link.wa, na coluna AÇÃO antiga que
+                   ficou escondida acima) também precisa ser recriado aqui,
+                   senão fica escondido junto com o resto da coluna antiga. */
+                const linkWhats = row.cells[indiceAcaoAntiga]
+                    ? row.cells[indiceAcaoAntiga].querySelector('a.wa')
+                    : null;
+                if(linkWhats){
+                    const w=document.createElement('a');
+                    w.href=linkWhats.getAttribute('href');
+                    w.target='_blank';
+                    w.title=linkWhats.title||'';
+                    w.textContent='WHATSAPP';
+                    w.className='action-btn';
+                    w.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:92px;height:38px;padding:0 14px;margin:0 0 0 6px;box-sizing:border-box;background:#0d3a22;border:1px solid #25d366;color:#25d366;';
+                    td.appendChild(w);
+                }
                 row.appendChild(td);
             });
 
