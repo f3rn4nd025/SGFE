@@ -14,8 +14,10 @@ label{display:block;color:#7d9798;font-size:10px;font-weight:900;text-transform:
 input,select,textarea{width:100%;box-sizing:border-box;background:#050b0c;color:#fff;border:1px solid #185154;border-radius:7px;padding:11px}
 button{cursor:pointer}.btn{background:#0b5b5e;border:1px solid #12d8de;color:#fff;border-radius:7px;padding:11px 16px;font-weight:900}
 .table-wrap{overflow:auto;border:1px solid #123638;border-radius:9px}.table{width:100%;min-width:1250px}.table th,.table td{white-space:nowrap}.table td{font-size:12px}
-.row-action{display:inline-block;padding:6px 9px;border:1px solid #12d8de;border-radius:6px;color:#12d8de;text-decoration:none;font-weight:900;font-size:10px;background:transparent}
-.row-action:hover{background:#0b4143;color:#fff}.pill{padding:4px 8px;border:1px solid #27595b;border-radius:20px}.ok{background:#0b4b3d;border-color:#0c8f6f}
+.row-action{display:inline-block;padding:6px 9px;border:1px solid #12d8de;border-radius:6px;color:#12d8de;text-decoration:none;font-weight:900;font-size:10px;background:transparent;margin-right:5px}
+.row-action:hover{background:#0b4143;color:#fff}
+.row-action.wa{border-color:#25d366;color:#25d366}
+.row-action.wa:hover{background:#0d3a22;color:#fff}.pill{padding:4px 8px;border:1px solid #27595b;border-radius:20px}.ok{background:#0b4b3d;border-color:#0c8f6f}
 .alert{padding:11px;border-radius:8px;margin-bottom:12px}.success{background:#09251f;border:1px solid #116e59}.error{background:#311414;border:1px solid #8d3434}
 .small{font-size:11px;color:#71898a}.event-current{color:#12d8de;font-weight:900}.money{font-variant-numeric:tabular-nums}.valor-final{font-size:12px !important;font-weight:900 !important;}
 @media(max-width:900px){.filters{grid-template-columns:1fr}.module-top{align-items:flex-start;flex-direction:column}}
@@ -88,6 +90,9 @@ button{cursor:pointer}.btn{background:#0b5b5e;border:1px solid #12d8de;color:#ff
 </tr></thead>
 <tbody>
 {% for r in data %}
+{% set tel_limpo = (r.Telefone or '')|replace('(','')|replace(')','')|replace('-','')|replace(' ','')|replace('+','') %}
+{% set tel_wa = ('55' ~ tel_limpo) if (tel_limpo|length <= 11 and tel_limpo|length > 0) else tel_limpo %}
+{% set msg_cobranca = ('Olá, ' ~ (r.Contato or r.Atleta) ~ '! \n\nTudo bem? \n\nSegue o link das fotos do evento ' ~ r.Evento ~ ' onde apenas você terá acesso as fotos por 30 dias para baixar.\nObs.: se você compartilhar esse link com alguém, essa pessoa terá acesso às fotos.\n\n' ~ (r.LinkFotos or '[LINK DAS FOTOS]') ~ '\n\nE aproveitando, segue os dados para o pagamento:\n\nDados Bancários para pagamento:\nBanco: ' ~ conta.banco ~ '\nAgência: ' ~ conta.agencia ~ '\nConta: ' ~ conta.conta ~ '\n\nPix: ' ~ conta.pix) %}
 <tr>
 <td>#{{ r.IDVenda }}</td>
 <td>{{ r.DataVenda }}</td>
@@ -100,7 +105,10 @@ button{cursor:pointer}.btn{background:#0b5b5e;border:1px solid #12d8de;color:#ff
 <td><span class="pill {% if r.Status %}ok{% endif %}">{{ r.Status or '—' }}</span></td>
 <td>{% if r.Finalizado %}<span class="pill ok">SIM</span>{% else %}<span class="pill">NÃO</span>{% endif %}</td>
 <td>{{ r.DataFinalizacao or '—' }}</td>
-<td><a class="row-action" href="/vendas/{{ r.IDVenda }}/editar">EDITAR</a></td>
+<td style="white-space:nowrap">
+<a class="row-action" href="/vendas/{{ r.IDVenda }}/editar">EDITAR</a>
+{% if tel_limpo %}<a class="row-action wa" href="https://wa.me/{{ tel_wa }}?text={{ msg_cobranca|urlencode }}" target="_blank" title="Enviar link das fotos e dados de pagamento pelo WhatsApp">WHATSAPP</a>{% endif %}
+</td>
 </tr>
 {% else %}
 <tr><td colspan="12" style="padding:30px;text-align:center;color:#71898a">Nenhuma venda encontrada para o evento selecionado.</td></tr>

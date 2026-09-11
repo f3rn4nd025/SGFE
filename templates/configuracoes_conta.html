@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dados Bancários | SGFE WEB</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+.form-card{max-width:650px;border:1px solid #123f41;background:linear-gradient(145deg,#0a1112,#050809);border-radius:12px;padding:24px}
+.field{margin-bottom:16px}.field label{display:block;color:#8ba3a4;font-size:11px;text-transform:uppercase;font-weight:800;margin-bottom:6px}
+.field input{width:100%;box-sizing:border-box;background:#050b0c;color:#fff;border:1px solid #185154;border-radius:7px;padding:12px}
+.btn{margin-top:8px;background:#0b5b5e;border:1px solid #12d8de;color:#fff;border-radius:8px;padding:12px 18px;font-weight:900;cursor:pointer}
+.back{color:#12d8de;text-decoration:none;font-weight:800}
+.result{margin-bottom:16px;padding:12px;border-radius:8px;background:#09251f;border:1px solid #116e59;color:#8ff1d5}
+.error{margin-bottom:16px;padding:12px;border-radius:8px;background:#311414;border:1px solid #8d3434;color:#ffb0b0}
+.muted{color:#819596;font-size:12px;margin-top:0}
+</style>
+<style id="sgfe-menu-logout-style">
+.sgfe-menu-logout{margin-top:12px !important;border-top:1px solid rgba(24,216,222,.16);padding-top:12px !important;}
+</style>
+</head>
+<body><div class="shell">
+<header class="topbar"><div class="brand"><div class="brand-mark"><img src="{{ url_for('static', filename='img/logo_fg.png') }}" alt="FG Fotos Esportivas"></div></div><div class="sgfe-head"><div class="sgfe-title">SGFE WEB</div><div class="sgfe-subtitle">SISTEMA DE GESTÃO FG FOTOS ESPORTIVAS</div></div><div class="event-box"><span>SGFE</span><strong>DADOS BANCÁRIOS</strong><small>Usado nas mensagens de cobrança</small></div></header>
+<div class="layout"><aside class="sidebar">
+<a class="menu" href="/"><b>⌂</b> Painel</a><a class="menu" href="/atletas"><b>♙</b> Atletas</a><a class="menu" href="/agendamentos"><b>◫</b> Agendamentos</a>
+<a class="menu" href="/vendas"><b>◎</b> Vendas / Pacotes</a><a class="menu" href="/entregas"><b>✓</b> Entregas</a>
+<a class="menu" href="/pagamentos"><b>$</b> Pagamentos</a><a class="menu" href="/historico"><b>▤</b> Histórico</a><a class="menu active" href="/configuracoes"><b>⚙</b> Configurações</a>
+<a class="menu sgfe-menu-logout" href="/logout" aria-label="Sair do sistema"><b>↪</b> SAIR</a></aside>
+<main class="main">
+<div class="page-actions"><a class="nav-btn" href="/">⌂ MENU PRINCIPAL</a><a class="nav-btn back-btn" href="#" onclick="history.back();return false;">← VOLTAR</a></div>
+<a class="back" href="/configuracoes">← Voltar para Configurações</a>
+<h1>Dados Bancários</h1>
+<p class="muted">Esses dados entram automaticamente na mensagem de WhatsApp de cobrança, na tela de Vendas / Pacotes. Cada fotógrafo cadastra os seus próprios dados aqui — ficam salvos só na sua conta.</p>
+{% if mensagem %}<div class="result">{{ mensagem }}</div>{% endif %}
+{% if erro %}<div class="error">{{ erro }}</div>{% endif %}
+<div class="form-card">
+<form method="post">
+<div class="field"><label>Banco</label><input name="banco" value="{{ dados.banco }}" placeholder="Ex.: 0260 - Nu Pagamentos SA"></div>
+<div class="field"><label>Agência</label><input name="agencia" value="{{ dados.agencia }}" placeholder="Ex.: 0001"></div>
+<div class="field"><label>Conta</label><input name="conta" value="{{ dados.conta }}" placeholder="Ex.: 941983556-2"></div>
+<div class="field"><label>Chave Pix</label><input name="pix" value="{{ dados.pix }}" placeholder="Ex.: 32849649000178"></div>
+<button class="btn" type="submit">SALVAR DADOS BANCÁRIOS</button>
+</form>
+</div>
+</main></div></div></body></html>

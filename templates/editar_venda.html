@@ -30,7 +30,7 @@
 <div class="form-card">
 {% if mensagem %}<div class="result">{{ mensagem }}</div>{% endif %}
 {% if erro %}<div class="error">{{ erro }}</div>{% endif %}
-{% if possui_pagamento %}<div class="warning">Esta venda já possui pagamento registrado. Por segurança, o pacote e o valor não podem ser alterados.</div>{% endif %}
+{% if possui_pagamento %}<div class="warning">Esta venda já possui pagamento registrado. Por segurança, o pacote e o valor não podem ser alterados — mas status, observações e o link das fotos continuam editáveis.</div>{% endif %}
 <div class="info"><div class="box"><small>Atleta</small><strong>{{ nome_atleta }}</strong></div><div class="box"><small>Evento</small><strong>{{ nome_evento }}</strong></div><div class="box"><small>Agendamento</small><strong>#{{ venda[9] or '' }}</strong></div><div class="box"><small>OS</small><strong>#{{ venda[0] }}</strong></div></div>
 <form method="post"><div class="grid">
 <div class="field"><label>Quantidade de provas</label><select id="qtd" name="qtd_provas" required {% if possui_pagamento %}disabled{% endif %}>
@@ -41,8 +41,9 @@
 <div class="field"><label>Valor do pacote</label><div class="price" id="pacote">R$ 0,00</div></div>
 <div class="field"><label>Valor final</label><div class="price" id="final">R$ 0,00</div></div>
 <div class="field full"><label>Observações</label><textarea name="observacoes">{{ venda[8] or '' }}</textarea></div>
+<div class="field full"><label>Link das fotos (enviado no WhatsApp de cobrança)</label><input name="link_fotos" value="{{ venda[11] or '' }}" placeholder="Ex.: https://drive.google.com/..."></div>
 </div>
-<button class="btn" type="submit" {% if possui_pagamento %}disabled{% endif %}>SALVAR ALTERAÇÕES</button>
+<button class="btn" type="submit">SALVAR ALTERAÇÕES</button>
 </form></div>
 </main></div></div>
 <script>
