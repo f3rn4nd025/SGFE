@@ -5835,7 +5835,7 @@ html, body{
             // que a tabela realmente encolha e sobre espaço pros botões).
             table.style.tableLayout='fixed';
             table.style.width='100%';
-            const largurasColunas={1:'50px',3:'150px',4:'165px',5:'40px',6:'65px',7:'65px',8:'80px',9:'78px'};
+            const largurasColunas={1:'45px',3:'115px',4:'150px',5:'40px',6:'65px',7:'65px',8:'80px',9:'62px'};
             Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); })
                 .concat([headRow])
                 .forEach(function(row){
@@ -5846,8 +5846,8 @@ html, body{
                             cel.style.setProperty('max-width',largurasColunas[idx],'important');
                             cel.style.setProperty('overflow','hidden','important');
                             cel.style.setProperty('text-overflow','ellipsis','important');
-                            cel.style.setProperty('padding-left','6px','important');
-                            cel.style.setProperty('padding-right','6px','important');
+                            cel.style.setProperty('padding-left', (idx==='1'||idx==='9') ? '4px' : '6px','important');
+                            cel.style.setProperty('padding-right', (idx==='1'||idx==='9') ? '4px' : '6px','important');
                         }
                     });
                 });
