@@ -3551,18 +3551,19 @@ def imprimir_balizamento_evento(evento_id):
             elif cor == "laranja":
                 rgb = (1.00, 0.55, 0.15)
             else:
-                rgb = (1.00, 0.82, 0.10)
+                rgb = (1.00, 1.00, 0.0)
 
-            # Fundo translúcido + pequena faixa lateral. O conteúdo original
-            # continua sendo o conteúdo principal do PDF.
+            # Fundo 100% opaco, desenhado ATRÁS do texto (overlay=False)
+            # — funciona como um marca-texto de verdade: cor sólida por
+            # baixo, o nome continua legível por cima.
             page.draw_rect(
                 faixa,
                 color=rgb,
                 fill=rgb,
                 width=1.0,
-                stroke_opacity=0.75,
-                fill_opacity=0.18,
-                overlay=True,
+                stroke_opacity=1.0,
+                fill_opacity=1.0,
+                overlay=False,
             )
 
         pdf_bytes = doc.tobytes(garbage=4, deflate=True)
