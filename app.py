@@ -5827,7 +5827,7 @@ html, body{
             const th=document.createElement('th');
             th.textContent='AÇÕES';
             th.style.whiteSpace='nowrap';
-            th.style.minWidth='200px';
+            th.style.minWidth='260px';
             headRow.appendChild(th);
 
             // Força a largura de cada coluna direto por JavaScript (inline
@@ -5855,12 +5855,12 @@ html, body{
             const rows=Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); });
             rows.forEach(function(row){
                 const td=document.createElement('td');
-                td.style.whiteSpace='normal';
-                td.style.minWidth='96px';
+                td.style.whiteSpace='nowrap';
+                td.style.minWidth='260px';
                 td.style.display='flex';
-                td.style.flexWrap='wrap';
+                td.style.flexWrap='nowrap';
                 td.style.gap='4px';
-                td.style.alignContent='center';
+                td.style.alignItems='center';
 
                 let id='';
                 const primeira=row.cells[0];
