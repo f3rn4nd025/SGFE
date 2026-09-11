@@ -5672,23 +5672,23 @@ html, body{
 /* AJUSTE PONTUAL: reduz os espaços horizontais entre as colunas.
    Mantém espaço suficiente para ATLETA e EVENTO. */
 .sgfe-vendas-tabela-expandida table th:nth-child(1),
-.sgfe-vendas-tabela-expandida table td:nth-child(1){ width:60px !important; }
+.sgfe-vendas-tabela-expandida table td:nth-child(1){ width:55px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(2),
 .sgfe-vendas-tabela-expandida table td:nth-child(2){ width:90px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(3),
-.sgfe-vendas-tabela-expandida table td:nth-child(3){ width:205px !important; }
+.sgfe-vendas-tabela-expandida table td:nth-child(3){ width:160px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(4),
-.sgfe-vendas-tabela-expandida table td:nth-child(4){ width:220px !important; }
+.sgfe-vendas-tabela-expandida table td:nth-child(4){ width:175px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(5),
-.sgfe-vendas-tabela-expandida table td:nth-child(5){ width:65px !important; }
+.sgfe-vendas-tabela-expandida table td:nth-child(5){ width:60px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(6),
-.sgfe-vendas-tabela-expandida table td:nth-child(6){ width:100px !important; }
+.sgfe-vendas-tabela-expandida table td:nth-child(6){ width:85px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(7),
-.sgfe-vendas-tabela-expandida table td:nth-child(7){ width:100px !important; }
+.sgfe-vendas-tabela-expandida table td:nth-child(7){ width:85px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(8),
-.sgfe-vendas-tabela-expandida table td:nth-child(8){ width:115px !important; }
+.sgfe-vendas-tabela-expandida table td:nth-child(8){ width:100px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(9),
-.sgfe-vendas-tabela-expandida table td:nth-child(9){ width:110px !important; }
+.sgfe-vendas-tabela-expandida table td:nth-child(9){ width:95px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(10),
 .sgfe-vendas-tabela-expandida table td:nth-child(10){ width:110px !important; }
 
@@ -5819,14 +5819,14 @@ html, body{
             const th=document.createElement('th');
             th.textContent='AÇÕES';
             th.style.whiteSpace='nowrap';
-            th.style.minWidth='210px';
+            th.style.minWidth='180px';
             headRow.appendChild(th);
 
             const rows=Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); });
             rows.forEach(function(row){
                 const td=document.createElement('td');
                 td.style.whiteSpace='nowrap';
-                td.style.minWidth='210px';
+                td.style.minWidth='180px';
 
                 let id='';
                 const primeira=row.cells[0];
@@ -5840,7 +5840,7 @@ html, body{
                     a.href='/vendas/'+encodeURIComponent(id)+'/editar';
                     a.textContent='✎ EDITAR';
                     a.className='action-btn';
-                    a.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:92px;height:38px;padding:0 14px;margin:0;box-sizing:border-box;';
+                    a.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:80px;height:36px;padding:0 10px;margin:0;box-sizing:border-box;font-size:11px;';
                     td.appendChild(a);
                 }
 
@@ -5857,7 +5857,7 @@ html, body{
                     w.title=linkWhats.title||'';
                     w.textContent='WHATSAPP';
                     w.className='action-btn';
-                    w.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:92px;height:38px;padding:0 14px;margin:0 0 0 6px;box-sizing:border-box;background:#0d3a22;border:1px solid #25d366;color:#25d366;';
+                    w.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:80px;height:36px;padding:0 10px;margin:0 0 0 4px;box-sizing:border-box;background:#0d3a22;border:1px solid #25d366;color:#25d366;font-size:11px;';
                     td.appendChild(w);
                 }
                 row.appendChild(td);
