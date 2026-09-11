@@ -3741,8 +3741,12 @@ def web_agendamentos():
                     status_antigo = str(ex[1] or "").upper()
                     if "CANCEL" not in status_antigo:
                         raise ValueError(
-                            f"Este atleta já possui o agendamento #{ex[0]} "
-                            "para este evento."
+                            f"Este atleta já possui o agendamento #{ex[0]} para este evento. "
+                            "Não é possível criar outro agendamento igual — mas se for pra "
+                            "adicionar mais provas (ex.: a família pediu mais depois), não "
+                            "precisa de agendamento novo: clique em BALIZAMENTO nesse "
+                            f"agendamento #{ex[0]} já existente, marque as provas novas e "
+                            "gere uma nova venda/OS a partir dele."
                         )
 
                 # IDAgendamento não possui geração automática no PostgreSQL.
@@ -3995,8 +3999,12 @@ def web_agendamentos():
                 for ex in cur.fetchall():
                     if "CANCEL" not in str(ex[1] or "").upper():
                         raise ValueError(
-                            f"Este atleta já possui o agendamento #{ex[0]} "
-                            "para este evento."
+                            f"Este atleta já possui o agendamento #{ex[0]} para este evento. "
+                            "Não é possível criar outro agendamento igual — mas se for pra "
+                            "adicionar mais provas (ex.: a família pediu mais depois), não "
+                            "precisa de agendamento novo: clique em BALIZAMENTO nesse "
+                            f"agendamento #{ex[0]} já existente, marque as provas novas e "
+                            "gere uma nova venda/OS a partir dele."
                         )
 
                 cur.execute("""
@@ -5819,7 +5827,7 @@ html, body{
             const th=document.createElement('th');
             th.textContent='AÇÕES';
             th.style.whiteSpace='nowrap';
-            th.style.minWidth='180px';
+            th.style.minWidth='260px';
             headRow.appendChild(th);
 
             // Força a largura de cada coluna direto por JavaScript (inline
@@ -5850,7 +5858,7 @@ html, body{
             rows.forEach(function(row){
                 const td=document.createElement('td');
                 td.style.whiteSpace='nowrap';
-                td.style.minWidth='180px';
+                td.style.minWidth='260px';
 
                 let id='';
                 const primeira=row.cells[0];
@@ -5868,9 +5876,23 @@ html, body{
                     td.appendChild(a);
                 }
 
-                /* O botão do WhatsApp (link.wa, na coluna AÇÃO antiga que
-                   ficou escondida acima) também precisa ser recriado aqui,
-                   senão fica escondido junto com o resto da coluna antiga. */
+                /* O botão de REAGENDAR (link.reagendar) e o do WhatsApp
+                   (link.wa), na coluna AÇÃO antiga que ficou escondida
+                   acima, também precisam ser recriados aqui, senão ficam
+                   escondidos junto com o resto da coluna antiga. */
+                const linkReagendar = row.cells[indiceAcaoAntiga]
+                    ? row.cells[indiceAcaoAntiga].querySelector('a.reagendar')
+                    : null;
+                if(linkReagendar){
+                    const rg=document.createElement('a');
+                    rg.href=linkReagendar.getAttribute('href');
+                    rg.title=linkReagendar.title||'';
+                    rg.textContent='REAGENDAR';
+                    rg.className='action-btn';
+                    rg.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:80px;height:36px;padding:0 10px;margin:0 0 0 4px;box-sizing:border-box;background:#3a2810;border:1px solid #ffae3d;color:#ffae3d;font-size:11px;';
+                    td.appendChild(rg);
+                }
+
                 const linkWhats = row.cells[indiceAcaoAntiga]
                     ? row.cells[indiceAcaoAntiga].querySelector('a.wa')
                     : null;
