@@ -3522,25 +3522,24 @@ def imprimir_balizamento_evento(evento_id):
             if not rect_total:
                 continue
 
-            # Marca só a área do nome (com uma margem pequena nas
-            # laterais), não a linha inteira — registro, ano, clube e
-            # tempo ficam de fora da marcação.
+            # Marca a linha inteira (todos os dados: número, nome,
+            # registro, ano, clube, tempo).
             # A caixa que o PDF reporta pra cada palavra sobra espaço
             # embaixo (reservado pra letras com descendente, tipo g/j/p),
             # mesmo quando o texto é só maiúsculas sem nenhuma. Isso fazia
             # a marcação ficar descentralizada (mais espaço embaixo do que
             # em cima). Aqui a caixa é encolhida pra altura real do texto
             # antes de aplicar a margem, pra ficar centralizada de verdade.
-            altura_texto = rect_nome.height * 0.72
-            y0_texto = rect_nome.y0
-            y1_texto = rect_nome.y0 + altura_texto
+            altura_texto = rect_total.height * 0.72
+            y0_texto = rect_total.y0
+            y1_texto = rect_total.y0 + altura_texto
 
             margem_y = max(0.5, min(1.5, altura_texto * 0.20))
             margem_x = 4.0
             faixa = fitz.Rect(
-                max(0, rect_nome.x0 - margem_x),
+                max(0, rect_total.x0 - margem_x),
                 max(0, y0_texto - margem_y),
-                min(page.rect.width - 1, rect_nome.x1 + margem_x),
+                min(page.rect.width - 1, rect_total.x1 + margem_x),
                 min(page.rect.height, y1_texto + margem_y),
             )
 
