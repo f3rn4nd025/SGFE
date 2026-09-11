@@ -5819,12 +5819,14 @@ html, body{
             const th=document.createElement('th');
             th.textContent='AÇÕES';
             th.style.whiteSpace='nowrap';
+            th.style.minWidth='210px';
             headRow.appendChild(th);
 
             const rows=Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); });
             rows.forEach(function(row){
                 const td=document.createElement('td');
                 td.style.whiteSpace='nowrap';
+                td.style.minWidth='210px';
 
                 let id='';
                 const primeira=row.cells[0];
