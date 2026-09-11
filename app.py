@@ -5680,13 +5680,13 @@ html, body{
 .sgfe-vendas-tabela-expandida table th:nth-child(4),
 .sgfe-vendas-tabela-expandida table td:nth-child(4){ width:175px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(5),
-.sgfe-vendas-tabela-expandida table td:nth-child(5){ width:60px !important; }
+.sgfe-vendas-tabela-expandida table td:nth-child(5){ width:45px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(6),
-.sgfe-vendas-tabela-expandida table td:nth-child(6){ width:85px !important; }
+.sgfe-vendas-tabela-expandida table td:nth-child(6){ width:70px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(7),
-.sgfe-vendas-tabela-expandida table td:nth-child(7){ width:85px !important; }
+.sgfe-vendas-tabela-expandida table td:nth-child(7){ width:70px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(8),
-.sgfe-vendas-tabela-expandida table td:nth-child(8){ width:100px !important; }
+.sgfe-vendas-tabela-expandida table td:nth-child(8){ width:85px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(9),
 .sgfe-vendas-tabela-expandida table td:nth-child(9){ width:95px !important; }
 .sgfe-vendas-tabela-expandida table th:nth-child(10),
@@ -5834,13 +5834,13 @@ html, body{
                     Object.keys(largurasColunas).forEach(function(idx){
                         const cel=row.cells[Number(idx)-1];
                         if(cel){
-                            cel.style.width=largurasColunas[idx];
-                            cel.style.maxWidth=largurasColunas[idx];
-                            cel.style.overflow='hidden';
-                            cel.style.textOverflow='ellipsis';
+                            cel.style.setProperty('width',largurasColunas[idx],'important');
+                            cel.style.setProperty('max-width',largurasColunas[idx],'important');
+                            cel.style.setProperty('overflow','hidden','important');
+                            cel.style.setProperty('text-overflow','ellipsis','important');
                             if(['5','6','7','8'].indexOf(idx)>=0){
-                                cel.style.paddingLeft='6px';
-                                cel.style.paddingRight='6px';
+                                cel.style.setProperty('padding-left','6px','important');
+                                cel.style.setProperty('padding-right','6px','important');
                             }
                         }
                     });
