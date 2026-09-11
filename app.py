@@ -5822,6 +5822,30 @@ html, body{
             th.style.minWidth='180px';
             headRow.appendChild(th);
 
+            // Força a largura de cada coluna direto por JavaScript (inline
+            // style sempre vence qualquer regra de CSS, então isso garante
+            // que a tabela realmente encolha e sobre espaço pros botões).
+            table.style.tableLayout='fixed';
+            table.style.width='100%';
+            const largurasColunas={1:'55px',3:'150px',4:'165px',5:'45px',6:'70px',7:'70px',8:'85px',9:'95px'};
+            Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); })
+                .concat([headRow])
+                .forEach(function(row){
+                    Object.keys(largurasColunas).forEach(function(idx){
+                        const cel=row.cells[Number(idx)-1];
+                        if(cel){
+                            cel.style.width=largurasColunas[idx];
+                            cel.style.maxWidth=largurasColunas[idx];
+                            cel.style.overflow='hidden';
+                            cel.style.textOverflow='ellipsis';
+                            if(['5','6','7','8'].indexOf(idx)>=0){
+                                cel.style.paddingLeft='6px';
+                                cel.style.paddingRight='6px';
+                            }
+                        }
+                    });
+                });
+
             const rows=Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); });
             rows.forEach(function(row){
                 const td=document.createElement('td');
