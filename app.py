@@ -3553,18 +3553,17 @@ def imprimir_balizamento_evento(evento_id):
             else:
                 rgb = (1.00, 1.00, 0.0)
 
-            # Fundo 100% opaco, desenhado ATRÁS do texto (overlay=False)
-            # — funciona como um marca-texto de verdade: cor sólida por
-            # baixo, o nome continua legível por cima.
-            page.draw_rect(
-                faixa,
-                color=rgb,
-                fill=rgb,
-                width=1.0,
-                stroke_opacity=1.0,
-                fill_opacity=1.0,
-                overlay=False,
-            )
+            # Marca-texto nativo do PDF (annotation de highlight), não um
+            # retângulo desenhado por cima/atrás do conteúdo. Isso evita
+            # dois problemas: cobrir o texto (se opaco e por cima) ou
+            # ficar escondido atrás de um fundo da própria página (se por
+            # trás). A anotação de highlight sempre aparece, e usa mistura
+            # "multiply" automaticamente — cor sólida, texto continua
+            # legível por cima.
+            annot = page.add_highlight_annot(faixa)
+            annot.set_colors(stroke=rgb)
+            annot.set_opacity(1.0)
+            annot.update()
 
         pdf_bytes = doc.tobytes(garbage=4, deflate=True)
         doc.close()
