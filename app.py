@@ -1228,6 +1228,55 @@ def _ensure_status_venda_cortesia(conn):
     conn.commit()
 
 
+def _ensure_config_conta(conn):
+    """Garante a tabela de dados bancários/Pix do fotógrafo (uma linha
+    só). Cada fotógrafo tem seu próprio schema/banco isolado, então essa
+    tabela já fica automaticamente separada de fotógrafo pra fotógrafo —
+    não precisa de coluna de dono."""
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT TOP 1 IDConfig FROM tblConfigConta")
+        return
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE tblConfigConta (
+            IDConfig AUTOINCREMENT PRIMARY KEY,
+            Banco TEXT(120),
+            Agencia TEXT(30),
+            Conta TEXT(30),
+            Pix TEXT(120)
+        )
+    """)
+    cur.execute("""
+        INSERT INTO tblConfigConta (Banco, Agencia, Conta, Pix)
+        VALUES ('', '', '', '')
+    """)
+    conn.commit()
+
+
+def _ensure_venda_link_fotos(conn):
+    """Garante a coluna LinkFotos em tblVendaPacotes — link (Google
+    Drive/Fotos etc.) enviado ao cliente junto com a mensagem de
+    cobrança pelo WhatsApp."""
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT TOP 1 LinkFotos FROM tblVendaPacotes")
+        return
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        cur = conn.cursor()
+    cur.execute("ALTER TABLE tblVendaPacotes ADD COLUMN LinkFotos TEXT(255)")
+    conn.commit()
+
+
 def _ensure_status_agendamento_cancelado(conn):
     """Garante o status CANCELADO em tblStatusAgendamento."""
     cur = conn.cursor()
@@ -1550,6 +1599,8 @@ def get_connection():
     _ensure_status_pagamento(conn)
     _ensure_status_venda_cancelado(conn)
     _ensure_status_venda_cortesia(conn)
+    _ensure_config_conta(conn)
+    _ensure_venda_link_fotos(conn)
     _ensure_status_agendamento_cancelado(conn)
     try:
         _ensure_event_balizamento_fields(conn)
@@ -3432,18 +3483,31 @@ def imprimir_balizamento_evento(evento_id):
             """Retorna (retângulo da linha inteira, retângulo só do nome)."""
             nome_norm = _normalizar_nome(atleta)
             words = page.get_text("words") or []
-            linhas = {}
+            palavras = [w for w in words if len(w) >= 5]
 
-            for w in words:
-                if len(w) < 5:
-                    continue
-                x0, y0, x1, y1, texto = w[:5]
-                # Agrupa palavras que pertencem à mesma linha visual.
-                chave_y = round(float(y0) / 2.0) * 2.0
-                linhas.setdefault(chave_y, []).append(w)
+            # Agrupa palavras da mesma linha visual por proximidade de Y
+            # (não por um bucket fixo de arredondamento) — colunas como
+            # registro/ano/clube/tempo às vezes têm a baseline alguns
+            # pontos diferente da coluna do nome, e o arredondamento fixo
+            # partia isso em "linhas" diferentes, deixando essas colunas
+            # de fora da marcação.
+            palavras.sort(key=lambda z: z[1])
+            linhas = []
+            grupo_atual = []
+            y_referencia = None
+            tolerancia = 3.2
+            for w in palavras:
+                y0 = float(w[1])
+                if grupo_atual and abs(y0 - y_referencia) > tolerancia:
+                    linhas.append(grupo_atual)
+                    grupo_atual = []
+                grupo_atual.append(w)
+                y_referencia = y0 if y_referencia is None else (y_referencia + y0) / 2.0
+            if grupo_atual:
+                linhas.append(grupo_atual)
 
             candidatos = []
-            for _, ws in linhas.items():
+            for ws in linhas:
                 ws = sorted(ws, key=lambda z: z[0])
                 texto_linha = " ".join(str(z[4]) for z in ws)
                 if not nome_norm or nome_norm not in _normalizar_nome(texto_linha):
@@ -4928,9 +4992,11 @@ def web_vendas():
                 chaves.append(("num", n))
             return chaves
 
-        cur.execute("SELECT IDCliente, Nome FROM tblClientes")
+        cur.execute("SELECT IDCliente, Nome, Telefone, Contato FROM tblClientes")
         cliente_map = {}
         cliente_raw_map = {}
+        cliente_telefone_map = {}
+        cliente_contato_map = {}
         for r in cur.fetchall():
             valor_id = r[0]
             nome = _txt(r[1]).strip()
@@ -4939,6 +5005,8 @@ def web_vendas():
             for tipo, chave in _id_chaves(valor_id):
                 if tipo == "num":
                     cliente_map[chave] = nome
+                    cliente_telefone_map[chave] = _txt(r[2]).strip()
+                    cliente_contato_map[chave] = _txt(r[3]).strip()
                 else:
                     cliente_raw_map[chave] = nome
 
@@ -5090,7 +5158,8 @@ def web_vendas():
                 IDAgendamento,
                 Finalizado,
                 DataFinalizacao,
-                StatusPagamento
+                StatusPagamento,
+                LinkFotos
             FROM tblVendaPacotes
             ORDER BY IDVenda DESC
         """)
@@ -5224,6 +5293,9 @@ def web_vendas():
                 print(f"[SGFE-VENDAS] atleta_nao_localizado venda={venda_id} IDCliente={r[2]!r} IDAgendamento={r[9]!r}")
 
             evento_nome = evento_map.get(evento_id, {}).get("nome", "")
+            telefone = cliente_telefone_map.get(cliente_id, "")
+            contato = cliente_contato_map.get(cliente_id, "") or atleta
+            link_fotos = _txt(r[13]).strip()
 
             qtd = _num(r[4])
             valor_pacote = r[5] if r[5] is not None else 0
@@ -5295,6 +5367,9 @@ def web_vendas():
                 "finalizado": finalizado,
                 "DataFinalizacao": _txt(r[11]),
                 "data_finalizacao": _txt(r[11]),
+                "Telefone": telefone,
+                "Contato": contato,
+                "LinkFotos": link_fotos,
             }
 
             if search:
@@ -5311,6 +5386,15 @@ def web_vendas():
         if data:
             print(f"[SGFE-VENDAS] primeira_venda={data[0].get('IDVenda')} atleta={data[0].get('Atleta')} evento={data[0].get('Evento')}")
 
+        cur.execute("SELECT TOP 1 Banco, Agencia, Conta, Pix FROM tblConfigConta")
+        conta_row = cur.fetchone()
+        conta = {
+            "banco": _txt(conta_row[0]) if conta_row else "",
+            "agencia": _txt(conta_row[1]) if conta_row else "",
+            "conta": _txt(conta_row[2]) if conta_row else "",
+            "pix": _txt(conta_row[3]) if conta_row else "",
+        }
+
     except Exception as e:
         try:
             conn.rollback()
@@ -5318,6 +5402,7 @@ def web_vendas():
             pass
         erro = str(e)
         data = []
+        conta = locals().get("conta", {"banco": "", "agencia": "", "conta": "", "pix": ""})
         print(f"[SGFE-VENDAS] ERRO_LISTAGEM={e}")
     finally:
         conn.close()
@@ -5334,7 +5419,8 @@ def web_vendas():
         mensagem=mensagem,
         erro=erro,
         eventos=eventos,
-        evento_selecionado=evento_selecionado
+        evento_selecionado=evento_selecionado,
+        conta=conta
     )
 
     # Ajuste visual da tela Vendas / Pacotes.
@@ -5957,7 +6043,7 @@ def editar_venda(id_venda):
         cur.execute("""
             SELECT IDVenda, IDCliente, IDEvento, QtdProvas, ValorPacote,
                    ValorDesconto, ValorFinal, IDStatusVenda,
-                   Observacoes, IDAgendamento, Finalizado
+                   Observacoes, IDAgendamento, Finalizado, LinkFotos
             FROM tblVendaPacotes
             ORDER BY IDVenda
         """)
@@ -5986,10 +6072,21 @@ def editar_venda(id_venda):
                 continue
 
         if request.method == "POST":
+            # O link das fotos não é dado financeiro — pode ser salvo
+            # mesmo quando a venda já tem pagamento (que trava pacote/
+            # valor/desconto por segurança).
+            link_fotos = str(request.form.get("link_fotos") or "").strip()
+            cur.execute(
+                "UPDATE tblVendaPacotes SET LinkFotos=? WHERE IDVenda=?",
+                [link_fotos, id_venda]
+            )
+            conn.commit()
+
             if possui_pagamento:
                 raise ValueError(
                     "Esta venda já possui pagamento registrado. "
-                    "Não é seguro alterar o pacote ou o valor."
+                    "Não é seguro alterar o pacote ou o valor. "
+                    "(O link das fotos foi salvo normalmente.)"
                 )
 
             qtd = access_int(request.form.get("qtd_provas") or 0)
@@ -6083,7 +6180,7 @@ def editar_venda(id_venda):
             cur.execute("""
                 SELECT IDVenda, IDCliente, IDEvento, QtdProvas, ValorPacote,
                        ValorDesconto, ValorFinal, IDStatusVenda,
-                       Observacoes, IDAgendamento, Finalizado
+                       Observacoes, IDAgendamento, Finalizado, LinkFotos
                 FROM tblVendaPacotes
                 ORDER BY IDVenda
             """)
@@ -6267,6 +6364,57 @@ def configuracoes():
     finally:
         conn.close()
     return render_template("configuracoes.html", dados=dados, erro=erro)
+
+
+@app.route("/configuracoes/conta", methods=["GET", "POST"])
+def configuracoes_conta():
+    conn = get_connection()
+    mensagem = ""
+    erro = ""
+    try:
+        cur = conn.cursor()
+
+        if request.method == "POST":
+            banco = str(request.form.get("banco") or "").strip()
+            agencia = str(request.form.get("agencia") or "").strip()
+            conta = str(request.form.get("conta") or "").strip()
+            pix = str(request.form.get("pix") or "").strip()
+            cur.execute("SELECT TOP 1 IDConfig FROM tblConfigConta")
+            row = cur.fetchone()
+            if row:
+                cur.execute("""
+                    UPDATE tblConfigConta
+                    SET Banco=?, Agencia=?, Conta=?, Pix=?
+                    WHERE IDConfig=?
+                """, [banco, agencia, conta, pix, access_int(row[0])])
+            else:
+                cur.execute("""
+                    INSERT INTO tblConfigConta (Banco, Agencia, Conta, Pix)
+                    VALUES (?, ?, ?, ?)
+                """, [banco, agencia, conta, pix])
+            conn.commit()
+            mensagem = "Dados bancários atualizados com sucesso."
+
+        cur.execute("SELECT TOP 1 Banco, Agencia, Conta, Pix FROM tblConfigConta")
+        r = cur.fetchone()
+        conta_dados = {
+            "banco": str(r[0] or "") if r else "",
+            "agencia": str(r[1] or "") if r else "",
+            "conta": str(r[2] or "") if r else "",
+            "pix": str(r[3] or "") if r else "",
+        }
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        erro = str(e)
+        conta_dados = {"banco": "", "agencia": "", "conta": "", "pix": ""}
+    finally:
+        conn.close()
+    return render_template(
+        "configuracoes_conta.html", dados=conta_dados, mensagem=mensagem, erro=erro
+    )
 
 
 # ==========================
