@@ -17,7 +17,9 @@ button{cursor:pointer}.btn{background:#0b5b5e;border:1px solid #12d8de;color:#ff
 .row-action{display:inline-block;padding:6px 9px;border:1px solid #12d8de;border-radius:6px;color:#12d8de;text-decoration:none;font-weight:900;font-size:10px;background:transparent;margin-right:5px}
 .row-action:hover{background:#0b4143;color:#fff}
 .row-action.wa{border-color:#25d366;color:#25d366}
-.row-action.wa:hover{background:#0d3a22;color:#fff}.pill{padding:4px 8px;border:1px solid #27595b;border-radius:20px}.ok{background:#0b4b3d;border-color:#0c8f6f}
+.row-action.wa:hover{background:#0d3a22;color:#fff}
+.row-action.reagendar{border-color:#ffae3d;color:#ffae3d}
+.row-action.reagendar:hover{background:#3a2810;color:#fff}.pill{padding:4px 8px;border:1px solid #27595b;border-radius:20px}.ok{background:#0b4b3d;border-color:#0c8f6f}
 .alert{padding:11px;border-radius:8px;margin-bottom:12px}.success{background:#09251f;border:1px solid #116e59}.error{background:#311414;border:1px solid #8d3434}
 .small{font-size:11px;color:#71898a}.event-current{color:#12d8de;font-weight:900}.money{font-variant-numeric:tabular-nums}.valor-final{font-size:12px !important;font-weight:900 !important;}
 @media(max-width:900px){.filters{grid-template-columns:1fr}.module-top{align-items:flex-start;flex-direction:column}}
@@ -107,6 +109,7 @@ button{cursor:pointer}.btn{background:#0b5b5e;border:1px solid #12d8de;color:#ff
 <td>{{ r.DataFinalizacao or '—' }}</td>
 <td style="white-space:nowrap">
 <a class="row-action" href="/vendas/{{ r.IDVenda }}/editar">EDITAR</a>
+{% if r.IDAgendamento %}<a class="row-action reagendar" href="/agendamentos/{{ r.IDAgendamento }}/balizamento" title="Marcar mais provas para este mesmo agendamento e gerar uma nova OS">REAGENDAR</a>{% endif %}
 {% if tel_limpo %}<a class="row-action wa" href="https://wa.me/{{ tel_wa }}?text={{ msg_cobranca|urlencode }}" target="_blank" title="Enviar link das fotos e dados de pagamento pelo WhatsApp">WHATSAPP</a>{% endif %}
 </td>
 </tr>
