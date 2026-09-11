@@ -5827,7 +5827,7 @@ html, body{
             const th=document.createElement('th');
             th.textContent='AÇÕES';
             th.style.whiteSpace='nowrap';
-            th.style.minWidth='260px';
+            th.style.minWidth='200px';
             headRow.appendChild(th);
 
             // Força a largura de cada coluna direto por JavaScript (inline
@@ -5857,8 +5857,12 @@ html, body{
             const rows=Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); });
             rows.forEach(function(row){
                 const td=document.createElement('td');
-                td.style.whiteSpace='nowrap';
-                td.style.minWidth='260px';
+                td.style.whiteSpace='normal';
+                td.style.minWidth='96px';
+                td.style.display='flex';
+                td.style.flexWrap='wrap';
+                td.style.gap='4px';
+                td.style.alignContent='center';
 
                 let id='';
                 const primeira=row.cells[0];
@@ -5889,7 +5893,7 @@ html, body{
                     rg.title=linkReagendar.title||'';
                     rg.textContent='REAGENDAR';
                     rg.className='action-btn';
-                    rg.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:80px;height:36px;padding:0 10px;margin:0 0 0 4px;box-sizing:border-box;background:#3a2810;border:1px solid #ffae3d;color:#ffae3d;font-size:11px;';
+                    rg.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:80px;height:36px;padding:0 10px;margin:0;box-sizing:border-box;background:#3a2810;border:1px solid #ffae3d;color:#ffae3d;font-size:11px;';
                     td.appendChild(rg);
                 }
 
@@ -5903,7 +5907,7 @@ html, body{
                     w.title=linkWhats.title||'';
                     w.textContent='WHATSAPP';
                     w.className='action-btn';
-                    w.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:80px;height:36px;padding:0 10px;margin:0 0 0 4px;box-sizing:border-box;background:#0d3a22;border:1px solid #25d366;color:#25d366;font-size:11px;';
+                    w.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:80px;height:36px;padding:0 10px;margin:0;box-sizing:border-box;background:#0d3a22;border:1px solid #25d366;color:#25d366;font-size:11px;';
                     td.appendChild(w);
                 }
                 row.appendChild(td);
