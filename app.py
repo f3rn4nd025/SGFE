@@ -5839,17 +5839,17 @@ html, body{
             const th=document.createElement('th');
             th.textContent='AÇÕES';
             th.style.whiteSpace='nowrap';
-            th.style.setProperty('width','260px','important');
-            th.style.setProperty('min-width','260px','important');
-            th.style.setProperty('max-width','260px','important');
+            th.style.setProperty('width','36%','important');
             headRow.appendChild(th);
 
             // Força a largura de cada coluna direto por JavaScript (inline
             // style sempre vence qualquer regra de CSS, então isso garante
             // que a tabela realmente encolha e sobre espaço pros botões).
             table.style.tableLayout='fixed';
-            table.style.width='100%';
-            const largurasColunas={1:'40px',3:'130px',5:'40px',6:'65px',7:'65px',8:'80px',9:'62px'};
+            table.style.setProperty('width','100%','important');
+            table.style.setProperty('min-width','0','important');
+            table.style.setProperty('max-width','100%','important');
+            const largurasColunas={1:'5%',3:'16%',5:'5%',6:'9%',7:'9%',8:'11%',9:'9%'};
             Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); })
                 .concat([headRow])
                 .forEach(function(row){
@@ -5857,7 +5857,7 @@ html, body{
                         const cel=row.cells[Number(idx)-1];
                         if(cel){
                             cel.style.setProperty('width',largurasColunas[idx],'important');
-                            cel.style.setProperty('max-width',largurasColunas[idx],'important');
+                            cel.style.removeProperty('min-width');
                             cel.style.setProperty('overflow','hidden','important');
                             cel.style.setProperty('text-overflow','ellipsis','important');
                             cel.style.setProperty('padding-left', (idx==='1'||idx==='9') ? '4px' : '6px','important');
@@ -5870,13 +5870,12 @@ html, body{
             rows.forEach(function(row){
                 const td=document.createElement('td');
                 td.style.whiteSpace='nowrap';
-                td.style.setProperty('width','260px','important');
-                td.style.setProperty('min-width','260px','important');
-                td.style.setProperty('max-width','260px','important');
+                td.style.setProperty('width','36%','important');
                 td.style.display='flex';
                 td.style.flexWrap='nowrap';
-                td.style.gap='4px';
+                td.style.gap='3px';
                 td.style.alignItems='center';
+                td.style.overflow='hidden';
 
                 let id='';
                 const primeira=row.cells[0];
@@ -5890,7 +5889,7 @@ html, body{
                     a.href='/vendas/'+encodeURIComponent(id)+'/editar';
                     a.textContent='✎ EDITAR';
                     a.className='action-btn';
-                    a.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:72px;height:34px;padding:0 8px;margin:0;box-sizing:border-box;font-size:11px;';
+                    a.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:0;flex:1 1 0;height:32px;padding:0 4px;margin:0;box-sizing:border-box;font-size:9px;overflow:hidden;text-overflow:ellipsis;';
                     td.appendChild(a);
                 }
 
@@ -5907,7 +5906,7 @@ html, body{
                     rg.title=linkReagendar.title||'';
                     rg.textContent='REAGENDAR';
                     rg.className='action-btn';
-                    rg.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:72px;height:34px;padding:0 8px;margin:0;box-sizing:border-box;background:#3a2810;border:1px solid #ffae3d;color:#ffae3d;font-size:11px;';
+                    rg.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:0;flex:1 1 0;height:32px;padding:0 4px;margin:0;box-sizing:border-box;background:#3a2810;border:1px solid #ffae3d;color:#ffae3d;font-size:9px;overflow:hidden;text-overflow:ellipsis;';
                     td.appendChild(rg);
                 }
 
@@ -5921,7 +5920,7 @@ html, body{
                     w.title=linkWhats.title||'';
                     w.textContent='WHATSAPP';
                     w.className='action-btn';
-                    w.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:72px;height:34px;padding:0 8px;margin:0;box-sizing:border-box;background:#0d3a22;border:1px solid #25d366;color:#25d366;font-size:11px;';
+                    w.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:0;flex:1 1 0;height:32px;padding:0 4px;margin:0;box-sizing:border-box;background:#0d3a22;border:1px solid #25d366;color:#25d366;font-size:9px;overflow:hidden;text-overflow:ellipsis;';
                     td.appendChild(w);
                 }
                 row.appendChild(td);
