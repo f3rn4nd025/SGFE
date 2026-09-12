@@ -5847,7 +5847,7 @@ html, body{
             // que a tabela realmente encolha e sobre espaço pros botões).
             table.style.tableLayout='fixed';
             table.style.width='100%';
-            const largurasColunas={1:'45px',3:'180px',5:'40px',6:'65px',7:'65px',8:'80px',9:'62px'};
+            const largurasColunas={1:'40px',3:'130px',5:'40px',6:'65px',7:'65px',8:'80px',9:'62px'};
             Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); })
                 .concat([headRow])
                 .forEach(function(row){
@@ -5886,7 +5886,7 @@ html, body{
                     a.href='/vendas/'+encodeURIComponent(id)+'/editar';
                     a.textContent='✎ EDITAR';
                     a.className='action-btn';
-                    a.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:80px;height:36px;padding:0 10px;margin:0;box-sizing:border-box;font-size:11px;';
+                    a.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:72px;height:34px;padding:0 8px;margin:0;box-sizing:border-box;font-size:11px;';
                     td.appendChild(a);
                 }
 
@@ -5903,7 +5903,7 @@ html, body{
                     rg.title=linkReagendar.title||'';
                     rg.textContent='REAGENDAR';
                     rg.className='action-btn';
-                    rg.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:80px;height:36px;padding:0 10px;margin:0;box-sizing:border-box;background:#3a2810;border:1px solid #ffae3d;color:#ffae3d;font-size:11px;';
+                    rg.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:72px;height:34px;padding:0 8px;margin:0;box-sizing:border-box;background:#3a2810;border:1px solid #ffae3d;color:#ffae3d;font-size:11px;';
                     td.appendChild(rg);
                 }
 
@@ -5917,7 +5917,7 @@ html, body{
                     w.title=linkWhats.title||'';
                     w.textContent='WHATSAPP';
                     w.className='action-btn';
-                    w.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:80px;height:36px;padding:0 10px;margin:0;box-sizing:border-box;background:#0d3a22;border:1px solid #25d366;color:#25d366;font-size:11px;';
+                    w.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;width:auto;min-width:72px;height:34px;padding:0 8px;margin:0;box-sizing:border-box;background:#0d3a22;border:1px solid #25d366;color:#25d366;font-size:11px;';
                     td.appendChild(w);
                 }
                 row.appendChild(td);
