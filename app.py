@@ -5784,12 +5784,14 @@ html, body{
             let indiceDataFinalizacao=-1;
             let indiceFinalizado=-1;
             let indiceData=-1;
+            let indiceEvento=-1;
             let indiceAcaoAntiga=-1;
             headers.forEach(function(cell, i){
                 const t=texto(cell).toUpperCase();
                 if(t==='DATA FINALIZAÇÃO' || t==='DATA FINALIZACAO') indiceDataFinalizacao=i;
                 if(t==='FINALIZADO') indiceFinalizado=i;
                 if(t==='DATA') indiceData=i;
+                if(t==='EVENTO') indiceEvento=i;
                 if(t==='AÇÃO' || t==='ACAO') indiceAcaoAntiga=i;
             });
 
@@ -5816,6 +5818,16 @@ html, body{
                 });
             }
 
+            /* Retira a coluna EVENTO da visualização — a tela já tem o
+               filtro por evento acima, então repetir o nome em toda linha
+               é redundante. Libera espaço pra coluna de ações. O dado
+               continua existindo normalmente, só não aparece na tabela. */
+            if(indiceEvento>=0){
+                Array.from(table.rows).forEach(function(row){
+                    if(row.cells[indiceEvento]) row.cells[indiceEvento].style.display='none';
+                });
+            }
+
             /* Remove somente a coluna AÇÃO antiga, deixando apenas o novo EDITAR
                na coluna AÇÕES. */
             if(indiceAcaoAntiga>=0){
@@ -5835,7 +5847,7 @@ html, body{
             // que a tabela realmente encolha e sobre espaço pros botões).
             table.style.tableLayout='fixed';
             table.style.width='100%';
-            const largurasColunas={1:'45px',3:'115px',4:'150px',5:'40px',6:'65px',7:'65px',8:'80px',9:'62px'};
+            const largurasColunas={1:'45px',3:'180px',5:'40px',6:'65px',7:'65px',8:'80px',9:'62px'};
             Array.from(table.tBodies).flatMap(function(tb){ return Array.from(tb.rows); })
                 .concat([headRow])
                 .forEach(function(row){
