@@ -31,6 +31,7 @@
 {% if mensagem %}<div class="result">{{ mensagem }}</div>{% endif %}
 {% if erro %}<div class="error">{{ erro }}</div>{% endif %}
 {% if possui_pagamento %}<div class="warning">Esta venda já possui pagamento registrado. Por segurança, o pacote e o valor não podem ser alterados — mas status, observações e o link das fotos continuam editáveis.</div>{% endif %}
+{% if request.args.get('qtd_provas') and not possui_pagamento %}<div class="result">Quantidade de provas atualizada pra {{ request.args.get('qtd_provas') }} (baseado no que está marcado agora no balizamento). Confira o valor e clique em Salvar pra confirmar.</div>{% endif %}
 <div class="info"><div class="box"><small>Atleta</small><strong>{{ nome_atleta }}</strong></div><div class="box"><small>Evento</small><strong>{{ nome_evento }}</strong></div><div class="box"><small>Agendamento</small><strong>#{{ venda[9] or '' }}</strong></div><div class="box"><small>OS</small><strong>#{{ venda[0] }}</strong></div></div>
 <form method="post"><div class="grid">
 <div class="field"><label>Quantidade de provas</label><select id="qtd" name="qtd_provas" required {% if possui_pagamento %}disabled{% endif %}>

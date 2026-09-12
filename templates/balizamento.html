@@ -113,9 +113,15 @@ window.confirmarSGFE=function(mensagem){
 const AG={{ info.id }};
 const CLIENTE={{ info.cliente_id }};
 const EVENTO={{ info.evento_id }};
+const VENDA_EXISTENTE={{ info.venda_existente_id }};
 const marcadasInicial={{ marcadas|tojson }};
 let selecionadas=new Set();
 Object.keys(marcadasInicial||{}).forEach(k=>selecionadas.add(String(k)));
+// Provas marcadas SÓ nesta visita à tela (não conta as que já vieram
+// marcadas de antes, tipo quando você usa o REAGENDAR numa venda que já
+// existe) — evita cobrar de novo pelas provas já vendidas numa OS
+// anterior quando você gera a próxima venda.
+let novasMarcacoes=new Set();
 function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function atualizarContador(){}
 function aviso(txt,tipo){const n=document.getElementById('fg-aviso');n.className='fg-aviso show '+tipo;n.innerHTML=txt;window.scrollTo({top:0,behavior:'smooth'});}
@@ -142,6 +148,7 @@ async function alternarMarcacao(btn,corForcada){
    const r=await fetch('/api/balizamento/desmarcar/'+idMarcacao,{method:'POST'});
    const d=await r.json(); if(!r.ok||!d.ok){aviso('❌ '+(d.erro||'Não foi possível desmarcar.'),'err');return;}
    selecionadas.delete(String(prova));
+   novasMarcacoes.delete(String(prova));
    const row=document.getElementById(rowId);
    row.querySelector('td').innerHTML='<div class="mark-group">'
      +'<button class="btn btn-mark" data-prova="'+prova+'" data-serie="'+serie+'" data-raia="'+raia+'" data-nome="'+esc(nome)+'" data-row="'+rowId+'" data-marcacao-id="" onclick="alternarMarcacao(this)">MARCAR</button>'
@@ -150,7 +157,11 @@ async function alternarMarcacao(btn,corForcada){
      +'</div>';
    pintar(rowId,'',false);
    const sit=document.getElementById('sit-'+prova+'-'+serie);sit.innerHTML='não marcada';
-   aviso('↩️ Prova desmarcada.','ok');
+   if(VENDA_EXISTENTE){
+     aviso('↩️ Prova desmarcada. Essa OS já tem uma venda (#'+VENDA_EXISTENTE+') — <a href="/vendas/'+VENDA_EXISTENTE+'/editar?qtd_provas='+selecionadas.size+'" style="color:#fff;text-decoration:underline">clique aqui pra atualizar a venda</a> com a quantidade certa de provas.','ok');
+   }else{
+     aviso('↩️ Prova desmarcada.','ok');
+   }
    atualizarContador();
   }catch(e){aviso('❌ Erro ao desmarcar: '+e,'err');}
   return;
@@ -161,6 +172,7 @@ async function alternarMarcacao(btn,corForcada){
   const r=await fetch('/api/balizamento/marcar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
   const d=await r.json(); if(!r.ok||!d.ok){aviso('❌ '+(d.erro||'Não foi possível marcar.'),'err');return;}
   selecionadas.add(String(prova));
+  novasMarcacoes.add(String(prova));
   const row=document.getElementById(rowId);
   row.querySelector('td').innerHTML='<button class="btn btn-unmark" data-prova="'+prova+'" data-serie="'+serie+'" data-raia="'+raia+'" data-nome="'+esc(nome)+'" data-row="'+rowId+'" data-marcacao-id="'+(d.marcacao?.id_marcacao||d.id_marcacao||'')+'" onclick="alternarMarcacao(this)">✓ MARCADO</button>';
   pintar(rowId,d.cor,true);
