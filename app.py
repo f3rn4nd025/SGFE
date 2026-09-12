@@ -5659,64 +5659,11 @@ html, body{
     box-sizing:border-box !important;
 }
 /* AJUSTE PONTUAL: ENQUADRAMENTO DA TABELA DE VENDAS/PACOTES
-   Somente faz a tabela caber na largura disponível.
-   Não altera filtro, dados, rotas ou regras de negócio. */
-.sgfe-vendas-tabela-expandida table{
-    width:100% !important;
-    max-width:100% !important;
-    min-width:0 !important;
-    table-layout:fixed !important;
-    box-sizing:border-box !important;
-}
-
-.sgfe-vendas-tabela-expandida table th,
-.sgfe-vendas-tabela-expandida table td{
-    min-width:0 !important;
-    max-width:none !important;
-    overflow:hidden !important;
-    text-overflow:ellipsis !important;
-}
-
-/* AJUSTE PONTUAL: reduz os espaços horizontais entre as colunas.
-   Mantém espaço suficiente para ATLETA e EVENTO. */
-.sgfe-vendas-tabela-expandida table th:nth-child(1),
-.sgfe-vendas-tabela-expandida table td:nth-child(1){ width:55px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(2),
-.sgfe-vendas-tabela-expandida table td:nth-child(2){ width:90px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(3),
-.sgfe-vendas-tabela-expandida table td:nth-child(3){ width:160px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(4),
-.sgfe-vendas-tabela-expandida table td:nth-child(4){ width:175px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(5),
-.sgfe-vendas-tabela-expandida table td:nth-child(5){ width:45px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(6),
-.sgfe-vendas-tabela-expandida table td:nth-child(6){ width:70px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(7),
-.sgfe-vendas-tabela-expandida table td:nth-child(7){ width:70px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(8),
-.sgfe-vendas-tabela-expandida table td:nth-child(8){ width:85px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(9),
-.sgfe-vendas-tabela-expandida table td:nth-child(9){ width:95px !important; }
-.sgfe-vendas-tabela-expandida table th:nth-child(10),
-.sgfe-vendas-tabela-expandida table td:nth-child(10){ width:110px !important; }
-
-.sgfe-vendas-tabela-expandida table th:nth-child(4),
-.sgfe-vendas-tabela-expandida table td:nth-child(4){
-    white-space:nowrap !important;
-    overflow:hidden !important;
-    text-overflow:clip !important;
-}
-
-.sgfe-vendas-tabela-expandida table th:last-child,
-.sgfe-vendas-tabela-expandida table td:last-child{
-    width:120px !important;
-}
-
-.sgfe-vendas-tabela-expandida table td:last-child .action-btn{
-    min-width:92px !important;
-    width:92px !important;
-    padding:0 8px !important;
-}
+   Obsoleto — a tabela de Vendas/Pacotes agora controla sua própria
+   largura via CSS no próprio vendas.html (classes vendas-wrap/vendas-table,
+   colunas em porcentagem). As regras antigas aqui mir3avam numa estrutura
+   de 10 colunas que não existe mais (a tabela hoje só tem 8), e como
+   eram !important elas vinham vencendo o CSS novo — por isso removidas. */
 
 </style>
 
