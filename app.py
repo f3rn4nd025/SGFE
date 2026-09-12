@@ -5839,7 +5839,9 @@ html, body{
             const th=document.createElement('th');
             th.textContent='AÇÕES';
             th.style.whiteSpace='nowrap';
-            th.style.minWidth='260px';
+            th.style.setProperty('width','260px','important');
+            th.style.setProperty('min-width','260px','important');
+            th.style.setProperty('max-width','260px','important');
             headRow.appendChild(th);
 
             // Força a largura de cada coluna direto por JavaScript (inline
@@ -5868,7 +5870,9 @@ html, body{
             rows.forEach(function(row){
                 const td=document.createElement('td');
                 td.style.whiteSpace='nowrap';
-                td.style.minWidth='260px';
+                td.style.setProperty('width','260px','important');
+                td.style.setProperty('min-width','260px','important');
+                td.style.setProperty('max-width','260px','important');
                 td.style.display='flex';
                 td.style.flexWrap='nowrap';
                 td.style.gap='4px';
