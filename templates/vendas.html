@@ -16,12 +16,61 @@
    principal) a usar 100% da largura disponível, só nesta página. */
 .main, .shell, .layout, main{ max-width:none !important; }
 .card{ max-width:none !important; width:100% !important; box-sizing:border-box !important; }
-.table-wrap{ width:100% !important; max-width:100% !important; }
+
+/* VENDAS - mesmo esquema já usado e validado na tela de Agendamentos:
+   CSS puro (sem JavaScript decidindo largura em tempo real), colunas em
+   porcentagem somando 100%, e rolagem horizontal só como reforço em
+   telas muito estreitas. */
+.table-wrap.vendas-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid #123638;
+    border-radius: 9px;
+}
+.table.vendas-table {
+    width: 100% !important;
+    min-width: 760px !important;
+    table-layout: fixed !important;
+}
+.table.vendas-table th,
+.table.vendas-table td {
+    box-sizing: border-box !important;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.table.vendas-table th:nth-child(1),
+.table.vendas-table td:nth-child(1) { width: 8%; }
+.table.vendas-table th:nth-child(2),
+.table.vendas-table td:nth-child(2) { width: 20%; }
+.table.vendas-table th:nth-child(3),
+.table.vendas-table td:nth-child(3) { width: 8%; }
+.table.vendas-table th:nth-child(4),
+.table.vendas-table td:nth-child(4) { width: 12%; }
+.table.vendas-table th:nth-child(5),
+.table.vendas-table td:nth-child(5) { width: 12%; }
+.table.vendas-table th:nth-child(6),
+.table.vendas-table td:nth-child(6) { width: 13%; }
+.table.vendas-table th:nth-child(7),
+.table.vendas-table td:nth-child(7) { width: 11%; }
+.table.vendas-table th:nth-child(8),
+.table.vendas-table td:nth-child(8) { width: 16%; }
+.table.vendas-table td:nth-child(8) {
+    overflow: visible !important;
+    white-space: nowrap !important;
+}
+.table.vendas-table td:nth-child(8) .row-action {
+    margin-right: 3px;
+}
+
 .filters{display:grid;grid-template-columns:minmax(260px,1fr) minmax(320px,1.4fr) auto;gap:10px;align-items:end}
 label{display:block;color:#7d9798;font-size:10px;font-weight:900;text-transform:uppercase;margin-bottom:5px}
 input,select,textarea{width:100%;box-sizing:border-box;background:#050b0c;color:#fff;border:1px solid #185154;border-radius:7px;padding:11px}
 button{cursor:pointer}.btn{background:#0b5b5e;border:1px solid #12d8de;color:#fff;border-radius:7px;padding:11px 16px;font-weight:900}
-.table-wrap{overflow:auto;border:1px solid #123638;border-radius:9px}.table{width:100%;min-width:0}.table th,.table td{white-space:nowrap}.table td{font-size:12px}
 .row-action{display:inline-block;padding:6px 9px;border:1px solid #12d8de;border-radius:6px;color:#12d8de;text-decoration:none;font-weight:900;font-size:10px;background:transparent;margin-right:5px}
 .row-action:hover{background:#0b4143;color:#fff}
 .row-action.wa{border-color:#25d366;color:#25d366}
@@ -93,10 +142,10 @@ button{cursor:pointer}.btn{background:#0b5b5e;border:1px solid #12d8de;color:#ff
 
 <div class="card">
 <div class="small" style="margin-bottom:10px">{{ data|length }} venda(s) encontrada(s)</div>
-<div class="table-wrap">
-<table class="table">
+<div class="table-wrap vendas-wrap">
+<table class="table vendas-table">
 <thead><tr>
-<th>OS</th><th>DATA</th><th>ATLETA</th><th>EVENTO</th><th>PROVAS</th><th>PACOTE</th><th>DESCONTO</th><th>VALOR FINAL</th><th>STATUS</th><th>FINALIZADO</th><th>DATA FINALIZAÇÃO</th><th>AÇÃO</th>
+<th>OS</th><th>ATLETA</th><th>PROVAS</th><th>PACOTE</th><th>DESCONTO</th><th>VALOR FINAL</th><th>STATUS</th><th>AÇÕES</th>
 </tr></thead>
 <tbody>
 {% for r in data %}
@@ -105,24 +154,20 @@ button{cursor:pointer}.btn{background:#0b5b5e;border:1px solid #12d8de;color:#ff
 {% set msg_cobranca = ('Olá, ' ~ (r.Contato or r.Atleta) ~ '! \n\nTudo bem? \n\nSegue o link das fotos do evento ' ~ r.Evento ~ ' onde apenas você terá acesso as fotos por 30 dias para baixar.\nObs.: se você compartilhar esse link com alguém, essa pessoa terá acesso às fotos.\n\n' ~ (r.LinkFotos or '[LINK DAS FOTOS]') ~ '\n\nE aproveitando, segue os dados para o pagamento:\n\nDados Bancários para pagamento:\nBanco: ' ~ conta.banco ~ '\nAgência: ' ~ conta.agencia ~ '\nConta: ' ~ conta.conta ~ '\n\nPix: ' ~ conta.pix) %}
 <tr>
 <td>#{{ r.IDVenda }}</td>
-<td>{{ r.DataVenda }}</td>
-<td>{{ r.Atleta }}</td>
-<td>{{ r.Evento }}</td>
+<td title="{{ r.Atleta }}">{{ r.Atleta }}</td>
 <td>{{ r.QtdProvas }}</td>
 <td class="money">R$ {{ '%.2f'|format((r.ValorPacote or 0)|float) }}</td>
 <td class="money">R$ {{ '%.2f'|format((r.ValorDesconto or 0)|float) }}</td>
 <td class="money valor-final">R$ {{ '%.2f'|format((r.ValorFinal or 0)|float) }}</td>
 <td><span class="pill {% if r.Status %}ok{% endif %}">{{ r.Status or '—' }}</span></td>
-<td>{% if r.Finalizado %}<span class="pill ok">SIM</span>{% else %}<span class="pill">NÃO</span>{% endif %}</td>
-<td>{{ r.DataFinalizacao or '—' }}</td>
-<td style="white-space:nowrap">
+<td>
 <a class="row-action" href="/vendas/{{ r.IDVenda }}/editar">EDITAR</a>
 {% if r.IDAgendamento %}<a class="row-action reagendar" href="/agendamentos/{{ r.IDAgendamento }}/balizamento" title="Marcar mais provas para este mesmo agendamento e gerar uma nova OS">REAGENDAR</a>{% endif %}
 {% if tel_limpo %}<a class="row-action wa" href="https://wa.me/{{ tel_wa }}?text={{ msg_cobranca|urlencode }}" target="_blank" title="Enviar link das fotos e dados de pagamento pelo WhatsApp">WHATSAPP</a>{% endif %}
 </td>
 </tr>
 {% else %}
-<tr><td colspan="12" style="padding:30px;text-align:center;color:#71898a">Nenhuma venda encontrada para o evento selecionado.</td></tr>
+<tr><td colspan="8" style="padding:30px;text-align:center;color:#71898a">Nenhuma venda encontrada para o evento selecionado.</td></tr>
 {% endfor %}
 </tbody>
 </table>
