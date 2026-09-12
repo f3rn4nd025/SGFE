@@ -5963,6 +5963,21 @@ html, body{
             voltas++;
         }
 
+        // DIAGNÓSTICO TEMPORÁRIO: mostra no Console (F12) a largura real de
+        // cada elemento na cadeia, pra descobrir exatamente onde o espaço
+        // está sendo perdido.
+        try{
+            console.log('[SGFE-VENDAS-DEBUG] ===== medindo larguras =====');
+            console.log('[SGFE-VENDAS-DEBUG] window.innerWidth:', window.innerWidth);
+            let el=table, nivel=0;
+            while(el && nivel<10){
+                const r=el.getBoundingClientRect();
+                console.log('[SGFE-VENDAS-DEBUG] nível '+nivel+' <'+el.tagName+' class="'+el.className+'">: largura='+r.width.toFixed(0)+'px');
+                el=el.parentElement;
+                nivel++;
+            }
+        }catch(e){console.log('[SGFE-VENDAS-DEBUG] erro ao medir:',e);}
+
         table.style.boxSizing='border-box';
     }
 
