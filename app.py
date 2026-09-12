@@ -3315,6 +3315,23 @@ def balizamento_agendamento(agendamento_id):
             "data_evento": evento_row[1].strftime("%d/%m/%Y") if evento_row and hasattr(evento_row[1], "strftime") else str((evento_row[1] if evento_row else "") or ""),
             "arquivo": str(evento_row[2] or "") if evento_row else ""
         }
+
+        # Se esse agendamento já tem uma venda ativa (não cancelada), a
+        # tela de marcação avisa e linka direto pra edição dela — tanto
+        # pra marcar mais provas quanto pra desmarcar, o objetivo é
+        # atualizar essa venda, não criar (nem deixar) desencontrada.
+        cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
+        status_venda_map = {access_int(r[0]): str(r[1] or "").upper() for r in cur.fetchall()}
+        cur.execute("SELECT IDVenda, IDAgendamento, IDStatusVenda FROM tblVendaPacotes ORDER BY IDVenda DESC")
+        info["venda_existente_id"] = 0
+        for vr in cur.fetchall():
+            if access_int(vr[1]) != agendamento_id:
+                continue
+            if "CANCEL" in status_venda_map.get(access_int(vr[2]), ""):
+                continue
+            info["venda_existente_id"] = access_int(vr[0])
+            break
+
         evento = {
             "nome": info["evento"],
             "data": info["data_evento"],
@@ -4574,6 +4591,34 @@ def venda_a_partir_do_agendamento(agendamento_id):
             "status": status_nome,
             "qtd_preselecionada": access_int(request.args.get("qtd_provas") or 0)
         }
+
+        # Se esse agendamento já tem uma venda ativa (não cancelada),
+        # o objetivo agora é ATUALIZAR essa venda (mais provas marcadas,
+        # ou menos) em vez de criar uma OS nova do zero — evita cobrar
+        # de novo pelo que já foi vendido. Manda direto pra edição dela,
+        # já com a quantidade de provas marcada agora pré-selecionada.
+        cur.execute("SELECT IDStatusVenda, StatusVenda FROM tblStatusVenda")
+        status_venda_map = {access_int(r[0]): str(r[1] or "").upper() for r in cur.fetchall()}
+        cur.execute("""
+            SELECT IDVenda, IDAgendamento, IDStatusVenda
+            FROM tblVendaPacotes
+            ORDER BY IDVenda DESC
+        """)
+        venda_existente_id = None
+        for vr in cur.fetchall():
+            if access_int(vr[1]) != agendamento_id:
+                continue
+            nome_status = status_venda_map.get(access_int(vr[2]), "")
+            if "CANCEL" in nome_status:
+                continue
+            venda_existente_id = access_int(vr[0])
+            break
+
+        if venda_existente_id and info["qtd_preselecionada"]:
+            return redirect(url_for(
+                "editar_venda", id_venda=venda_existente_id,
+                qtd_provas=info["qtd_preselecionada"]
+            ))
 
         # Busca os preços do evento sem depender do tipo que o ODBC Access
         # atribui ao parâmetro IDEvento. A comparação do ID é normalizada
@@ -6097,6 +6142,14 @@ def editar_venda(id_venda):
 
     if venda is None:
         return redirect(url_for("web_vendas", erro="Venda não encontrada."))
+
+    # Link vindo do REAGENDAR (balizamento): pré-seleciona a quantidade de
+    # provas marcada agora, sem gravar nada até o usuário confirmar e
+    # clicar em Salvar. Puramente visual/conveniência.
+    qtd_sugerida = access_int(request.args.get("qtd_provas") or 0)
+    if request.method == "GET" and qtd_sugerida and not possui_pagamento:
+        venda = list(venda)
+        venda[3] = qtd_sugerida
 
     return render_template(
         "editar_venda.html",
