@@ -5948,6 +5948,21 @@ html, body{
         box.style.boxSizing='border-box';
         box.style.overflowX='auto';
 
+        // A tabela ficava presa a uma largura menor que a página inteira
+        // (sobrava espaço em branco à direita, cortando a coluna de ações).
+        // Força os containers pais (.card, .main, etc.) a usarem 100% da
+        // largura disponível, com !important via JS pra vencer qualquer
+        // regra do CSS global que esteja limitando isso.
+        let ancestro=box;
+        let voltas=0;
+        while(ancestro && ancestro!==document.body && voltas<8){
+            ancestro.style.setProperty('max-width','none','important');
+            ancestro.style.setProperty('width','100%','important');
+            ancestro.style.setProperty('box-sizing','border-box','important');
+            ancestro=ancestro.parentElement;
+            voltas++;
+        }
+
         table.style.boxSizing='border-box';
     }
 
