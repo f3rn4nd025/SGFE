@@ -9,6 +9,14 @@
 .module-top h1{font-size:32px;margin:5px 0}.module-top p{margin:0;color:#819596}
 .actions{display:flex;gap:8px;flex-wrap:wrap}.action-btn{display:inline-block;text-decoration:none;background:#0b5b5e;color:#fff;border:1px solid #12d8de;border-radius:8px;padding:11px 15px;font-weight:900}
 .card{border:1px solid #123f41;background:linear-gradient(145deg,#0a1112,#050809);border-radius:12px;padding:18px;margin-bottom:16px}
+
+/* A tabela de vendas estava presa a uma largura menor que a página
+   inteira (sobrava espaço em branco à direita), o que cortava a coluna
+   de ações. Força o container da tabela (e seus pais até o conteúdo
+   principal) a usar 100% da largura disponível, só nesta página. */
+.main, .shell, .layout, main{ max-width:none !important; }
+.card{ max-width:none !important; width:100% !important; box-sizing:border-box !important; }
+.table-wrap{ width:100% !important; max-width:100% !important; }
 .filters{display:grid;grid-template-columns:minmax(260px,1fr) minmax(320px,1.4fr) auto;gap:10px;align-items:end}
 label{display:block;color:#7d9798;font-size:10px;font-weight:900;text-transform:uppercase;margin-bottom:5px}
 input,select,textarea{width:100%;box-sizing:border-box;background:#050b0c;color:#fff;border:1px solid #185154;border-radius:7px;padding:11px}
