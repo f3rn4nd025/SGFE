@@ -16,7 +16,7 @@ button{cursor:pointer}.btn{background:#0b5b5e;border:1px solid #12d8de;color:#ff
 .grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:12px}.full{grid-column:1/-1}
 .new-card{border-left:3px solid #12d8de}
 .table-wrap{overflow:auto;border:1px solid #123638;border-radius:9px}.table{width:100%;min-width:1250px}.table th,.table td{white-space:nowrap}.table td{font-size:12px}
-.row-action{display:inline-block;padding:6px 9px;border:1px solid #12d8de;border-radius:6px;color:#12d8de;text-decoration:none;font-weight:900;font-size:10px}.row-action:hover{background:#0b4143;color:#fff}
+.row-action{display:inline-block;padding:5px 6px;border:1px solid #12d8de;border-radius:6px;color:#12d8de;text-decoration:none;font-weight:900;font-size:9px}.row-action:hover{background:#0b4143;color:#fff}
 .whatsapp{border-color:#20d96b;color:#20d96b}.whatsapp:hover{background:#0b4425;color:#fff}.wa-disabled{opacity:.35;cursor:not-allowed;border-color:#526b6c;color:#526b6c}
 .pill{padding:4px 8px;border:1px solid #27595b;border-radius:20px}.ok{background:#0b4b3d;border-color:#0c8f6f}
 .alert{padding:11px;border-radius:8px;margin-bottom:12px}.success{background:#09251f;border:1px solid #116e59}.error{background:#311414;border:1px solid #8d3434}
@@ -78,7 +78,7 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 }
 .table.agendamentos-table {
     width: 100% !important;
-    min-width: 900px !important;
+    min-width: 820px !important;
     table-layout: fixed !important;
 }
 .table.agendamentos-table th,
@@ -88,28 +88,28 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
     padding-right: 4px !important;
 }
 .table.agendamentos-table th:nth-child(1),
-.table.agendamentos-table td:nth-child(1) { width: 7%; }
+.table.agendamentos-table td:nth-child(1) { width: 4%; }
 .table.agendamentos-table th:nth-child(2),
 .table.agendamentos-table td:nth-child(2) { width: 8%; }
 .table.agendamentos-table th:nth-child(3),
-.table.agendamentos-table td:nth-child(3) { width: 15%; }
+.table.agendamentos-table td:nth-child(3) { width: 14%; }
 .table.agendamentos-table th:nth-child(4),
-.table.agendamentos-table td:nth-child(4) { width: 17%; }
+.table.agendamentos-table td:nth-child(4) { width: 16%; }
 .table.agendamentos-table th:nth-child(5),
-.table.agendamentos-table td:nth-child(5) { width: 11%; }
+.table.agendamentos-table td:nth-child(5) { width: 10%; }
 .table.agendamentos-table th:nth-child(6),
-.table.agendamentos-table td:nth-child(6) { width: 9%; }
+.table.agendamentos-table td:nth-child(6) { width: 8%; }
 .table.agendamentos-table th:nth-child(7),
-.table.agendamentos-table td:nth-child(7) { width: 10%; }
+.table.agendamentos-table td:nth-child(7) { width: 8%; }
 .table.agendamentos-table th:nth-child(8),
-.table.agendamentos-table td:nth-child(8) { width: 23%; }
+.table.agendamentos-table td:nth-child(8) { width: 32%; }
 
 .table.agendamentos-table td:nth-child(8) {
     overflow: visible !important;
     white-space: nowrap !important;
 }
 .table.agendamentos-table td:nth-child(8) .row-action {
-    margin-right: 3px;
+    margin-right: 2px;
 }
 
 </style>
@@ -255,7 +255,7 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 <div class="table-wrap agendamentos-wrap">
 <table class="table agendamentos-table">
 <thead><tr>
-<th>AGENDAMENTO</th><th>DATA</th><th>ATLETA</th><th>EVENTO</th><th>DATA EVENTO</th><th>CIDADE</th><th>AVISO</th><th>AÇÃO</th>
+<th>ID</th><th>DATA</th><th>ATLETA</th><th>EVENTO</th><th>DATA EVENTO</th><th>CIDADE</th><th>AVISO</th><th>AÇÃO</th>
 </tr></thead>
 <tbody>
 {% for r in data %}
