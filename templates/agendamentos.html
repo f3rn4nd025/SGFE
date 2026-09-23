@@ -67,9 +67,9 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 
 /* AGENDAMENTOS - PRIMEIRO AJUSTE: ENQUADRAR AÇÃO NA TELA
    Não altera fonte nem tamanho dos botões.
-   Tabela com 9 colunas (removemos OBSERVAÇÕES): AGENDAMENTO, DATA,
-   ATLETA, EVENTO, DATA EVENTO, CIDADE, STATUS, AVISO, AÇÃO — a largura
-   de cada nth-child abaixo precisa bater com essa ordem exata. */
+   Tabela com 8 colunas (removemos OBSERVAÇÕES e STATUS): AGENDAMENTO,
+   DATA, ATLETA, EVENTO, DATA EVENTO, CIDADE, AVISO, AÇÃO — a largura de
+   cada nth-child abaixo precisa bater com essa ordem exata. */
 .table-wrap.agendamentos-wrap {
     width: 100%;
     max-width: 100%;
@@ -78,7 +78,7 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 }
 .table.agendamentos-table {
     width: 100% !important;
-    min-width: 980px !important;
+    min-width: 900px !important;
     table-layout: fixed !important;
 }
 .table.agendamentos-table th,
@@ -92,25 +92,23 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 .table.agendamentos-table th:nth-child(2),
 .table.agendamentos-table td:nth-child(2) { width: 8%; }
 .table.agendamentos-table th:nth-child(3),
-.table.agendamentos-table td:nth-child(3) { width: 13%; }
+.table.agendamentos-table td:nth-child(3) { width: 15%; }
 .table.agendamentos-table th:nth-child(4),
-.table.agendamentos-table td:nth-child(4) { width: 15%; }
+.table.agendamentos-table td:nth-child(4) { width: 17%; }
 .table.agendamentos-table th:nth-child(5),
-.table.agendamentos-table td:nth-child(5) { width: 10%; }
+.table.agendamentos-table td:nth-child(5) { width: 11%; }
 .table.agendamentos-table th:nth-child(6),
-.table.agendamentos-table td:nth-child(6) { width: 8%; }
+.table.agendamentos-table td:nth-child(6) { width: 9%; }
 .table.agendamentos-table th:nth-child(7),
-.table.agendamentos-table td:nth-child(7) { width: 8%; }
+.table.agendamentos-table td:nth-child(7) { width: 10%; }
 .table.agendamentos-table th:nth-child(8),
-.table.agendamentos-table td:nth-child(8) { width: 9%; }
-.table.agendamentos-table th:nth-child(9),
-.table.agendamentos-table td:nth-child(9) { width: 22%; }
+.table.agendamentos-table td:nth-child(8) { width: 23%; }
 
-.table.agendamentos-table td:nth-child(9) {
+.table.agendamentos-table td:nth-child(8) {
     overflow: visible !important;
     white-space: nowrap !important;
 }
-.table.agendamentos-table td:nth-child(9) .row-action {
+.table.agendamentos-table td:nth-child(8) .row-action {
     margin-right: 3px;
 }
 
@@ -257,13 +255,12 @@ box-shadow:0 0 0 100vmax rgba(0,0,0,.78),0 20px 60px rgba(0,0,0,.65)
 <div class="table-wrap agendamentos-wrap">
 <table class="table agendamentos-table">
 <thead><tr>
-<th>AGENDAMENTO</th><th>DATA</th><th>ATLETA</th><th>EVENTO</th><th>DATA EVENTO</th><th>CIDADE</th><th>STATUS</th><th>AVISO</th><th>AÇÃO</th>
+<th>AGENDAMENTO</th><th>DATA</th><th>ATLETA</th><th>EVENTO</th><th>DATA EVENTO</th><th>CIDADE</th><th>AVISO</th><th>AÇÃO</th>
 </tr></thead>
 <tbody>
 {% for r in data %}
 <tr>
 <td>#{{ r.IDAgendamento }}</td><td>{{ r.DataAgendamento }}</td><td>{{ r.Atleta }}</td><td>{{ r.Evento }}</td><td>{{ r.DataEvento }}</td><td>{{ r.Cidade }}</td>
-<td><span class="pill {% if 'CANCEL' not in r.Status|upper %}ok{% endif %}">{{ r.Status }}</span></td>
 <td>
 {% if r.Telefone %}
 <a class="row-action whatsapp" target="_blank" rel="noopener"
