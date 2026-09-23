@@ -1,0 +1,1507 @@
+{% extends "base.html" %}
+{% block title %}FG_WEB — Atendimento OS{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Orçamento - visual dos itens e edição rápida */
+  .item-orcamento{
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) auto auto;
+    align-items:center;
+    gap:12px;
+  }
+  .item-orcamento .orc-item-info{
+    min-width:0;
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .item-orcamento .orc-item-info strong{
+    text-align:left;
+    font-size:15px;
+    line-height:1.35;
+    color:#111;
+    white-space:nowrap;
+  }
+  .item-orcamento .orc-item-info small{
+    color:#555;
+    font-size:13px;
+  }
+  .item-orcamento .orc-item-total{
+    white-space:nowrap;
+    font-weight:800;
+    font-size:15px;
+    color:#111;
+  }
+  .modal-pagamento-overlay{
+    position:fixed;
+    inset:0;
+    z-index:9999;
+    background:rgba(0,0,0,.78);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    box-sizing:border-box;
+  }
+  .modal-pagamento-box{
+    width:min(420px,94vw);
+    background:#142021;
+    color:#fff;
+    border:1px solid #333;
+    border-top:4px solid #18a7a7;
+    border-radius:14px;
+    padding:24px;
+    box-shadow:0 25px 80px rgba(0,0,0,.65);
+  }
+  .modal-pagamento-box h2{margin:0 0 6px;font-size:20px}
+  .modal-pagamento-sub{margin:0 0 16px;color:#9fb5b5;font-size:12.5px}
+  .modal-pagamento-box label{
+    display:block;
+    margin-top:12px;
+    color:#ddd;
+    font-size:12px;
+    font-weight:800;
+  }
+  .modal-pagamento-box select,
+  .modal-pagamento-box input{
+    display:block;
+    width:100%;
+    box-sizing:border-box;
+    margin-top:6px;
+    padding:10px;
+    background:#0c1819;
+    color:#fff;
+    border:1px solid #38595a;
+    border-radius:8px;
+    font-size:13.5px;
+  }
+  .modal-pagamento-acoes{
+    display:flex;
+    gap:10px;
+    margin-top:20px;
+  }
+  .modal-pagamento-acoes .confirmar{
+    flex:1;
+    padding:11px 14px;
+    background:#18a7a7;
+    color:#fff;
+    border:0;
+    border-radius:8px;
+    font-weight:800;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .modal-pagamento-acoes .confirmar:hover{background:#20c2c2}
+  .modal-pagamento-acoes .cancelar{
+    padding:11px 14px;
+    background:#18292a;
+    color:#eef7f7;
+    border:1px solid #38595a;
+    border-radius:8px;
+    font-weight:800;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .orc-item-acoes{
+    display:flex;
+    gap:6px;
+    align-items:center;
+  }
+  .btn-orc-editar,
+  .btn-orc-excluir{
+    border:0;
+    border-radius:8px;
+    padding:8px 10px;
+    cursor:pointer;
+    font-weight:700;
+  }
+  .btn-orc-editar{
+    background:#e9f4f5;
+    color:#111;
+  }
+  .btn-orc-excluir{
+    background:#eee;
+    color:#333;
+  }
+  .orc-edicao{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 110px 130px auto;
+    gap:8px;
+    align-items:center;
+    width:100%;
+  }
+  .orc-edicao input{
+    width:100%;
+    box-sizing:border-box;
+    padding:10px 11px;
+    border:1px solid #bbb;
+    border-radius:8px;
+    background:#fff;
+    color:#111;
+    font-size:14px;
+  }
+  .orc-edicao-acoes{
+    display:flex;
+    gap:6px;
+  }
+  .orc-edicao-acoes button{
+    border:0;
+    border-radius:8px;
+    padding:10px 11px;
+    cursor:pointer;
+    font-weight:800;
+    white-space:nowrap;
+  }
+  .btn-orc-salvar-edicao{
+    background:#111;
+    color:#fff;
+  }
+  .btn-orc-cancelar-edicao{
+    background:#e5e5e5;
+    color:#111;
+  }
+  @media (max-width:800px){
+    .item-orcamento{grid-template-columns:1fr auto;}
+    .orc-item-acoes{grid-column:2;grid-row:1;}
+    .orc-item-total{grid-column:1;grid-row:2;}
+    .orc-edicao{grid-template-columns:1fr 1fr;}
+    .orc-edicao-acoes{grid-column:1 / -1;}
+  }
+
+  /* Execução — visual separado dos serviços e peças já lançados */
+  .item-execucao{
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) auto auto;
+    align-items:center;
+    gap:12px;
+    margin-top:8px;
+    padding:14px 16px;
+    border:1px solid #d9d9d9;
+    border-radius:10px;
+    background:#fafafa;
+    box-sizing:border-box;
+  }
+  .item-execucao .exec-info{
+    min-width:0;
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .item-execucao .exec-info strong{
+    color:#111;
+    font-size:15px;
+    line-height:1.35;
+    white-space:nowrap;
+  }
+  .item-execucao .exec-info small{
+    color:#666;
+    font-size:13px;
+  }
+  .item-execucao .exec-total{
+    white-space:nowrap;
+    color:#111;
+    font-weight:800;
+    font-size:15px;
+  }
+  .exec-excluir{
+    border:0;
+    border-radius:8px;
+    padding:8px 11px;
+    background:#eee;
+    color:#333;
+    cursor:pointer;
+    font-weight:700;
+  }
+  @media (max-width:800px){
+    .item-execucao{grid-template-columns:1fr auto;}
+    .item-execucao .exec-total{grid-column:1;grid-row:2;}
+    .item-execucao .exec-excluir{grid-column:2;grid-row:1 / span 2;}
+  }
+
+
+  /* Execução — cartões separados por tipo, seguindo o padrão visual do orçamento */
+  .exec-servico{background:#142a33!important;border-color:#294b59!important}
+  .exec-peca{background:#173326!important;border-color:#315a42!important}
+  .exec-acoes{display:flex;gap:7px;align-items:center;justify-content:flex-end}
+  .exec-editar,.exec-excluir{border-radius:8px;padding:8px 11px;cursor:pointer;font-weight:800;white-space:nowrap}
+  .exec-editar{background:#263338;color:#eef7f7;border:1px solid #466069}
+  .exec-excluir{background:#351b1d;color:#ffd1d1;border:1px solid #6a3438}
+  .btn-excluir-os{background:#351b1d!important;color:#ffd1d1!important;border-color:#6a3438!important}
+  .btn-excluir-os:hover{filter:brightness(1.08)}
+  .btn-excluir-os:disabled{opacity:.45;cursor:not-allowed;filter:none}
+  .btn-dados-cliente{background:#102628!important;color:#18d1d1!important;border:1px solid #18a7a7!important}
+  .btn-dados-cliente:hover{background:#18a7a7!important;color:#fff!important}
+  .btn-imprimir-os{background:#18a7a7!important;color:#fff!important;border:1px solid #18a7a7!important}
+  .btn-imprimir-os:hover{background:#20c2c2!important}
+  .exec-edicao{display:grid;grid-template-columns:minmax(0,1fr) 100px 125px auto;gap:8px;align-items:center;width:100%}
+  .exec-edicao input{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid #38595a;border-radius:8px;background:#0c1819;color:#fff;font-size:14px}
+  .exec-edicao-acoes{display:flex;gap:6px}
+  .exec-edicao-acoes button{border-radius:8px;padding:10px 11px;font-weight:800;white-space:nowrap}
+  .exec-salvar-edicao{background:#18a7a7!important;color:#fff!important;border-color:#18a7a7!important}
+  .exec-cancelar-edicao{background:#18292a!important;color:#fff!important}
+  @media(max-width:800px){
+    .exec-edicao{grid-template-columns:1fr 1fr}
+    .exec-edicao-acoes{grid-column:1/-1}
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<main>
+<div class="card atendimento-card">
+  <div class="atendimento-topo">
+    <div>
+      <div class="tag-atendimento">OS NOVA</div>
+      <h2 id="numero">OS —</h2>
+      <p id="cliente">Carregando...</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button id="btn-imprimir-os" class="btn-header btn-imprimir-os hide" type="button" onclick="window.open('/impressao/'+OS_ID, '_blank')">🖨 IMPRIMIR COMPROVANTE</button>
+      <button class="btn-header btn-dados-cliente" type="button" onclick="abrirDadosCliente()">👤 DADOS CLIENTE</button>
+      <button id="btn-excluir-os" class="btn-header btn-excluir-os" type="button" onclick="excluirOSAtual()">🗑 EXCLUIR OS</button>
+      <button class="btn-voltar" onclick="location.href='/consulta'">← Voltar</button>
+    </div>
+  </div>
+
+  <div id="os-finalizada-banner" class="os-finalizada-banner hide">
+    🔒 ESTA OS JÁ FOI FINALIZADA
+  </div>
+
+  <div class="resumo-grid">
+    <div class="resumo-box equipamento-box">
+      <span>Equipamento</span>
+      <div class="equipamento-cabecalho">
+        <strong id="equipamento">—</strong>
+        <button type="button" class="btn-editar-equipamento" onclick="abrirEditarEquipamento()">✎ EDITAR</button>
+      </div>
+    </div>
+    <div class="resumo-box"><span>Entrada</span><strong id="entrada">—</strong></div>
+    <div class="resumo-box"><span>Situação atual</span><strong id="situacao-atual">—</strong></div>
+  </div>
+
+
+  <!-- MODAL: EDITAR EQUIPAMENTO -->
+  <div id="modal-equipamento" class="modal-equipamento-backdrop hide" onclick="fecharEditarEquipamento(event)">
+    <div class="modal-equipamento" onclick="event.stopPropagation()">
+      <div class="modal-equipamento-header">
+        <div>
+          <span>CONFIGURAÇÃO</span>
+          <h3>Editar equipamento</h3>
+        </div>
+        <button type="button" class="modal-fechar" onclick="fecharEditarEquipamento()">×</button>
+      </div>
+
+      <div class="equipamento-form-grid">
+        <label>Tipo de equipamento
+          <input id="edit-equip-tipo" type="text" placeholder="Notebook, Desktop, Impressora...">
+        </label>
+        <label>Marca
+          <input id="edit-equip-marca" type="text" placeholder="Dell, HP, Lenovo...">
+        </label>
+        <label>Modelo
+          <input id="edit-equip-modelo" type="text" placeholder="Modelo do equipamento">
+        </label>
+        <label>Série
+          <input id="edit-equip-serie" type="text" placeholder="Número de série">
+        </label>
+        <label>Patrimônio
+          <input id="edit-equip-patrimonio" type="text" placeholder="Número do patrimônio">
+        </label>
+        <label>Data de compra
+          <input id="edit-equip-data-compra" type="text" placeholder="DD/MM/AAAA">
+        </label>
+        <label>Nota fiscal
+          <input id="edit-equip-nf" type="text" placeholder="Número da NF">
+        </label>
+        <label>Acessórios
+          <input id="edit-equip-acessorios" type="text" placeholder="Carregador, mouse, bolsa...">
+        </label>
+        <label class="equipamento-form-full">Configurações / observações da máquina
+          <textarea id="edit-equip-observacoes" rows="4" placeholder="Configuração, memória, armazenamento, sistema, acessórios e outras informações..."></textarea>
+        </label>
+      </div>
+
+      <div class="modal-equipamento-acoes">
+        <button type="button" class="btn-modal-cancelar" onclick="fecharEditarEquipamento()">CANCELAR</button>
+        <button type="button" class="btn-modal-salvar" onclick="salvarEquipamento()">SALVAR EQUIPAMENTO</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-cliente-dados" class="modal-equipamento-backdrop hide" onclick="fecharDadosCliente(event)">
+    <div class="modal-equipamento" onclick="event.stopPropagation()">
+      <div class="modal-equipamento-header">
+        <div>
+          <span>CLIENTE</span>
+          <h3>Dados do cliente</h3>
+        </div>
+        <button type="button" class="modal-fechar" onclick="fecharDadosCliente()">×</button>
+      </div>
+
+      <div class="equipamento-form-grid">
+        <label class="equipamento-form-full">Nome / Razão social
+          <input id="edit-cli-nome" type="text" placeholder="Nome completo">
+        </label>
+        <label>CPF / CNPJ
+          <input id="edit-cli-cpf" type="text" placeholder="000.000.000-00">
+        </label>
+        <label>Celular
+          <input id="edit-cli-celular" type="text" placeholder="(00)00000-0000">
+        </label>
+        <label>Telefone
+          <input id="edit-cli-telefone" type="text" placeholder="Telefone fixo">
+        </label>
+        <label>E-mail
+          <input id="edit-cli-email" type="text" placeholder="email@exemplo.com">
+        </label>
+        <label>CEP
+          <input id="edit-cli-cep" type="text" placeholder="00000-000">
+        </label>
+        <label class="equipamento-form-full">Endereço
+          <input id="edit-cli-endereco" type="text" placeholder="Rua, avenida...">
+        </label>
+        <label>Número
+          <input id="edit-cli-numero" type="text" placeholder="Número">
+        </label>
+        <label>Complemento
+          <input id="edit-cli-complemento" type="text" placeholder="Apto, bloco...">
+        </label>
+        <label>Bairro
+          <input id="edit-cli-bairro" type="text" placeholder="Bairro">
+        </label>
+        <label>Cidade
+          <input id="edit-cli-cidade" type="text" placeholder="Cidade">
+        </label>
+        <label>UF
+          <input id="edit-cli-uf" type="text" placeholder="UF" maxlength="2">
+        </label>
+        <label class="equipamento-form-full">Observações
+          <textarea id="edit-cli-observacoes" rows="3" placeholder="Observações sobre o cliente..."></textarea>
+        </label>
+      </div>
+
+      <div class="modal-equipamento-acoes">
+        <button type="button" class="btn-modal-cancelar" onclick="fecharDadosCliente()">FECHAR</button>
+        <button type="button" class="btn-modal-salvar" onclick="salvarClienteDados()">SALVAR CLIENTE</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="atendimento-section destaque-situacao">
+    <div class="section-title-row">
+      <div>
+        <h3>1. Situação da OS</h3>
+        <small>Primeiro informe em que etapa está o atendimento. Tudo fica salvo na própria OS.</small>
+      </div>
+    </div>
+    <div class="linha-form linha-situacao">
+      <div id="situacao-dropdown" style="position:relative;flex:1;min-width:260px;">
+  <button type="button" id="situacao-btn"
+    onclick="abrirMenuSituacao()"
+    style="width:100%;text-align:left;background:#fff;color:#222;border:1px solid #ccd1d6;border-radius:8px;padding:9px 12px;cursor:pointer;font:inherit;font-size:13.5px;position:relative;z-index:1100;">
+    Selecione a situação ▾
+  </button>
+  <div id="situacao-menu"
+    style="display:none;position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:1200;background:#fff;border:1px solid #ccd1d6;border-radius:8px;box-shadow:0 10px 30px #0003;max-height:320px;overflow:auto;">
+  </div>
+  <select id="situacao" style="display:none"></select>
+</div>
+      <button id="btn-whatsapp" class="btn-whatsapp hide" onclick="abrirWhatsApp()">📲 AVISAR CLIENTE</button>
+    </div>
+  </section>
+
+  <section class="atendimento-section">
+    <label>Defeito / solicitação</label>
+    <textarea id="defeito" rows="2"></textarea>
+  </section>
+
+  <section class="atendimento-section problema-section">
+    <h3>3. Problema identificado na análise</h3>
+    <textarea id="problema-identificado" rows="2" placeholder="Descreva o problema encontrado na máquina..."></textarea>
+  </section>
+
+  <section class="atendimento-section orcamento-section">
+    <div class="section-title-row">
+      <div>
+        <h3>4. Orçamento</h3>
+      </div>
+      <div class="orcamento-acoes">
+        <button class="btn-orcamento" onclick="abrirOrcamento()">🖨 ORÇAMENTO / PDF</button>
+        <button id="btn-orcamento-whatsapp" class="btn-whatsapp hide" onclick="enviarOrcamentoWhatsApp()">📲 ENVIAR ORÇAMENTO</button>
+        <button id="btn-confirmar-orcamento" class="btn-confirmar-orcamento hide" onclick="confirmarOrcamento()" >✅ CONFIRMAR ORÇAMENTO</button>
+      </div>
+    </div>
+    <div class="item-form">
+      <input id="orcServico" placeholder="Mão de obra / serviço do orçamento...">
+      <input id="orcServicoQtd" type="number" min="0" step="0.01" value="1" placeholder="Qtd.">
+      <input id="orcServicoValor" inputmode="decimal" placeholder="Valor R$">
+      <button onclick="adicionarOrcServico()">+ SERVIÇO</button>
+    </div>
+    <div id="orc-servicos"></div>
+    <div class="item-form">
+      <input id="orcPeca" placeholder="Peça do orçamento...">
+      <input id="orcPecaQtd" type="number" min="0" step="0.01" value="1" placeholder="Qtd.">
+      <input id="orcPecaValor" inputmode="decimal" placeholder="Valor R$">
+      <button onclick="adicionarOrcPeca()">+ PEÇA</button>
+    </div>
+    <div id="orc-pecas"></div>
+    <div class="resumo-orcamento">
+      <span>TOTAL DO ORÇAMENTO</span><strong id="total-orcamento">R$ 0,00</strong>
+    </div>
+  </section>
+
+  <section class="atendimento-section">
+    <h3>5. Execução do serviço</h3>
+    <div class="item-form">
+      <input id="servico" placeholder="Descreva o serviço realizado...">
+      <input id="servicoQtd" type="number" min="0" step="0.01" value="1" placeholder="Qtd.">
+      <input id="servicoValor" inputmode="decimal" placeholder="Valor R$">
+      <button onclick="adicionarServico()">+ SERVIÇO</button>
+    </div>
+    <div id="servicos"></div>
+  </section>
+
+  <section class="atendimento-section">
+    <h3>6. Peças utilizadas / vendidas</h3>
+    <div class="item-form">
+      <input id="peca" placeholder="Descrição da peça...">
+      <input id="pecaQtd" type="number" min="0" step="0.01" value="1" placeholder="Qtd.">
+      <input id="pecaValor" inputmode="decimal" placeholder="Valor R$">
+      <button onclick="adicionarPeca()">+ PEÇA</button>
+    </div>
+    <div id="pecas"></div>
+  </section>
+
+  <section class="atendimento-section">
+    <h3>7. Laudo / observações</h3>
+    <textarea id="observacoes" rows="2" placeholder="Laudo, diagnóstico, observações do técnico..."></textarea>
+  </section>
+
+  <section class="resumo-financeiro">
+    <div><span>Serviços</span><strong id="total-servicos">R$ 0,00</strong></div>
+    <div><span>Peças</span><strong id="total-pecas">R$ 0,00</strong></div>
+    <div class="total"><span>TOTAL DA OS</span><strong id="total-os">R$ 0,00</strong></div>
+  </section>
+
+  <div class="rodape-atendimento">
+    <button class="btn-voltar" onclick="location.href='/consulta'">CONSULTAR OUTRAS OS</button>
+    <div class="rodape-acoes-direita">
+      <button id="btn-salvar-tudo" class="btn-salvar-tudo" type="button" onclick="salvarTudo()">💾 SALVAR ALTERAÇÕES</button>
+      <button id="btn-finalizar" class="btn-finalizar" onclick="finalizarOS()" disabled>✓ FINALIZAR OS</button>
+    </div>
+  </div>
+</div>
+</main>
+
+<!-- Aviso flutuante de finalização -->
+<div id="aviso-finalizacao" class="aviso-finalizacao hide">
+  <div class="aviso-icone">⚠</div>
+  <div>
+    <strong id="aviso-titulo">OS ainda não pode ser finalizada</strong>
+    <p id="aviso-texto">Altere a situação para uma situação de encerramento.</p>
+  </div>
+</div>
+
+<!-- Modal de pagamento ao finalizar a OS -->
+<div id="modal-pagamento" class="modal-pagamento-overlay hide">
+  <div class="modal-pagamento-box">
+    <h2>Finalizar OS — Pagamento</h2>
+    <p class="modal-pagamento-sub">Antes de encerrar, confira a situação do pagamento desta OS.</p>
+
+    <label>Status
+      <select id="pgto-status">
+        <option value="0">Pendente</option>
+        <option value="1">Pago</option>
+      </select>
+    </label>
+
+    <label>Forma de pagamento
+      <select id="pgto-forma">
+        <option value="">Selecione</option>
+        <option>PIX</option>
+        <option>Dinheiro</option>
+        <option>Cartão de débito</option>
+        <option>Cartão de crédito</option>
+        <option>Boleto</option>
+        <option>Transferência</option>
+      </select>
+    </label>
+
+    <label id="pgto-data-label" class="hide">Data do pagamento
+      <input type="date" id="pgto-data">
+    </label>
+
+    <div class="modal-pagamento-acoes">
+      <button type="button" class="cancelar" onclick="fecharModalPagamento()">Cancelar</button>
+      <button type="button" class="confirmar" onclick="confirmarFinalizacaoComPagamento()">✓ FINALIZAR OS</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const OS_ID = {{ os_id }};
+const $ = id => document.getElementById(id);
+
+const SITUACOES = [
+  'Aguardando avaliação do técnico',
+  'Máquina em análise',
+  'Orçamento enviado',
+  'Aguardando autorização do orçamento',
+  'Serviço não autorizado',
+  'Equipamento Condenado',
+  'Autorizado, Reparo em andamento',
+  'Autorizado, Aguardando peça',
+  'Pronto, avisar cliente',
+  'Pronto, cliente avisado',
+  'Equipamento entregue reparado',
+  'Equipamento devolvido sem reparo'
+];
+
+const SITUACOES_FINALIZACAO = new Set([
+  'Equipamento entregue reparado',
+  'Equipamento Condenado',
+  'Serviço não autorizado'
+]);
+
+let osFinalizada = false;
+let osAtual = null;
+
+const SITUACOES_WHATSAPP = new Set([
+  'Máquina em análise',
+  'Orçamento enviado',
+  'Aguardando autorização do orçamento',
+  'Autorizado, Reparo em andamento',
+  'Autorizado, Aguardando peça',
+  'Pronto, avisar cliente'
+]);
+
+function esc(v){
+  return String(v ?? '')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'",'&#039;');
+}
+
+function num(v){
+  const n = Number(String(v ?? '').replace(',','.'));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function money(v){
+  return num(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+}
+
+function loadSituacoes(current){
+  const select = $('situacao');
+  const btn = $('situacao-btn');
+  const menu = $('situacao-menu');
+
+  select.innerHTML = SITUACOES.map(x =>
+    `<option value="${esc(x)}">${esc(x)}</option>`
+  ).join('');
+
+  select.value = SITUACOES.includes(current) ? current : SITUACOES[0];
+
+  btn.textContent = select.value + ' ▾';
+
+  menu.innerHTML = SITUACOES.map(x => `
+    <button type="button"
+      onclick='selecionarSituacao(${JSON.stringify(x)})'
+      style="display:block;width:100%;text-align:left;background:#fff;color:#222;border:0;border-bottom:1px solid #eee;border-radius:0;padding:11px 13px;cursor:pointer;font:inherit;">
+      ${esc(x)}
+    </button>
+  `).join('');
+}
+
+function abrirMenuSituacao(){
+  if(osFinalizada) return;
+  const menu = $('situacao-menu');
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function selecionarSituacao(valor){
+  if(osFinalizada) return;
+  $('situacao').value = valor;
+  $('situacao-btn').textContent = valor + ' ▾';
+  $('situacao-menu').style.display = 'none';
+  atualizarBotaoFinalizar();
+}
+
+document.addEventListener('click', function(ev){
+  const box = $('situacao-dropdown');
+  if(box && !box.contains(ev.target)){
+    $('situacao-menu').style.display = 'none';
+  }
+})
+
+function atualizarBotaoFinalizar(){
+  const situacao = $('situacao').value;
+  const pode = !osFinalizada && SITUACOES_FINALIZACAO.has(situacao);
+  $('btn-finalizar').disabled = osFinalizada;
+  atualizarBotaoWhatsApp();
+  atualizarBotaoOrcamentoWhatsApp();
+  atualizarBotaoConfirmarOrcamento();
+}
+
+function atualizarBotaoWhatsApp(){
+  const btn = $('btn-whatsapp');
+  if (!btn || osFinalizada || !SITUACOES_WHATSAPP.has($('situacao').value)) {
+    if (btn) btn.classList.add('hide');
+    return;
+  }
+
+  btn.classList.remove('hide');
+
+  const textos = {
+    'Máquina em análise': 'Avisar que a máquina entrou em análise',
+    'Orçamento enviado': 'Avisar que o orçamento foi enviado',
+    'Aguardando autorização do orçamento': 'Enviar aviso de orçamento',
+    'Autorizado, Reparo em andamento': 'Avisar que o reparo está em andamento',
+    'Autorizado, Aguardando peça': 'Avisar que estamos aguardando uma peça',
+    'Pronto, avisar cliente': 'Avisar que o equipamento está pronto'
+  };
+
+  btn.textContent = '📲 ' + (textos[$('situacao').value] || 'AVISAR CLIENTE');
+}
+
+function montarMensagemWhatsApp(){
+  const situacao = $('situacao').value;
+  const cliente = osAtual?.cliente?.nome || 'cliente';
+  const numero = osAtual?.numero_os || OS_ID;
+
+  const mensagens = {
+    'Máquina em análise':
+      `Olá, ${cliente}! Recebemos seu equipamento na FG Computadores e já iniciamos a análise. Assim que concluirmos a avaliação, entraremos em contato com o orçamento. OS nº ${numero}. FG Computadores.`,
+
+    'Orçamento enviado':
+      `Olá, ${cliente}! O orçamento da OS nº ${numero} foi enviado para sua avaliação. Ficamos no aguardo da sua autorização para prosseguir com o serviço. FG Computadores.`,
+
+    'Aguardando autorização do orçamento':
+      `Olá, ${cliente}! Temos uma atualização sobre seu equipamento na FG Computadores. A OS nº ${numero} está aguardando sua autorização para o orçamento/reparo. Se precisar de alguma informação, estamos à disposição. FG Computadores.`,
+
+    'Autorizado, Reparo em andamento':
+      `Olá, ${cliente}! Temos uma atualização sobre seu equipamento na FG Computadores. O reparo da OS nº ${numero} já está em andamento. Assim que tivermos novas informações, avisaremos você. FG Computadores.`,
+
+    'Autorizado, Aguardando peça':
+      `Olá, ${cliente}! Temos uma atualização sobre seu equipamento na FG Computadores. Na OS nº ${numero}, estamos aguardando a chegada de uma peça para continuar o reparo. Assim que tivermos novidades, avisaremos você. FG Computadores.`,
+
+    'Pronto, avisar cliente':
+      `Olá, ${cliente}! Seu equipamento, referente à OS nº ${numero}, está pronto. O reparo foi concluído e o equipamento está disponível para retirada. FG Computadores.`
+  };
+
+  return mensagens[situacao] || '';
+}
+
+async function abrirWhatsApp(){
+  if (osFinalizada) return;
+
+  const telefone = osAtual?.cliente?.celular || osAtual?.cliente?.telefone || '';
+  const numero = String(telefone).replace(/\D/g, '');
+
+  if (!numero) {
+    fgAlert('Este cliente não possui celular/telefone cadastrado.');
+    return;
+  }
+
+  const mensagem = montarMensagemWhatsApp();
+  if (!mensagem) return;
+
+  let whatsappNumero = numero;
+  if (whatsappNumero.length === 10 || whatsappNumero.length === 11) {
+    whatsappNumero = '55' + whatsappNumero;
+  }
+
+  const url = 'https://wa.me/' + whatsappNumero + '?text=' + encodeURIComponent(mensagem);
+  window.open(url, '_blank');
+
+  try {
+    await fetch('/api/os/' + OS_ID + '/whatsapp', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({situacao: $('situacao').value})
+    });
+  } catch (e) {
+    console.warn('Não foi possível registrar o aviso de WhatsApp.', e);
+  }
+}
+
+function bloquearEdicao(){
+  document.querySelectorAll('textarea,input,select').forEach(el => el.disabled = true);
+  document.querySelectorAll('.atendimento-card button').forEach(btn => {
+    if (!btn.classList.contains('btn-voltar') && !btn.classList.contains('btn-header')) {
+      if (btn.id !== 'btn-finalizar') btn.disabled = true;
+    }
+  });
+  $('btn-finalizar').disabled = true;
+  if ($('situacao-btn')) $('situacao-btn').disabled = true;
+  if ($('situacao-menu')) $('situacao-menu').style.display = 'none';
+  $('btn-whatsapp').classList.add('hide');
+  $('os-finalizada-banner').classList.remove('hide');
+  $('btn-imprimir-os').classList.remove('hide');
+  $('btn-salvar-tudo').classList.add('hide');
+}
+
+
+function abrirEditarEquipamento(){
+  if(osFinalizada){
+    fgAlert('Esta OS já foi finalizada e não pode ser alterada.');
+    return;
+  }
+
+  const e = osAtual?.equipamento || {};
+  $('edit-equip-tipo').value = e.tipo || '';
+  $('edit-equip-marca').value = e.marca || '';
+  $('edit-equip-modelo').value = e.modelo || '';
+  $('edit-equip-serie').value = e.serie || '';
+  $('edit-equip-patrimonio').value = e.patrimonio || '';
+  $('edit-equip-data-compra').value = e.data_compra || '';
+  $('edit-equip-nf').value = e.nf || '';
+  $('edit-equip-acessorios').value = e.acessorios || '';
+  $('edit-equip-observacoes').value = e.observacoes || '';
+
+  $('modal-equipamento').classList.remove('hide');
+  document.body.classList.add('modal-aberto');
+  setTimeout(() => $('edit-equip-tipo').focus(), 50);
+}
+
+function fecharEditarEquipamento(event){
+  if(event && event.target !== $('modal-equipamento')) return;
+  $('modal-equipamento').classList.add('hide');
+  document.body.classList.remove('modal-aberto');
+}
+
+function abrirDadosCliente(){
+  const c = osAtual?.cliente || {};
+  $('edit-cli-nome').value = c.nome || '';
+  $('edit-cli-cpf').value = c.cpf_cnpj || '';
+  $('edit-cli-celular').value = c.celular || '';
+  $('edit-cli-telefone').value = c.telefone || '';
+  $('edit-cli-email').value = c.email || '';
+  $('edit-cli-cep').value = c.cep || '';
+  $('edit-cli-endereco').value = c.endereco || '';
+  $('edit-cli-numero').value = c.numero || '';
+  $('edit-cli-complemento').value = c.complemento || '';
+  $('edit-cli-bairro').value = c.bairro || '';
+  $('edit-cli-cidade').value = c.cidade || '';
+  $('edit-cli-uf').value = c.uf || '';
+  $('edit-cli-observacoes').value = c.observacoes || '';
+
+  $('modal-cliente-dados').classList.remove('hide');
+  document.body.classList.add('modal-aberto');
+  configurarMascaraCelular($('edit-cli-celular'));
+  setTimeout(() => $('edit-cli-nome').focus(), 50);
+}
+
+function fecharDadosCliente(event){
+  if(event && event.target !== $('modal-cliente-dados')) return;
+  $('modal-cliente-dados').classList.add('hide');
+  document.body.classList.remove('modal-aberto');
+}
+
+function configurarMascaraCelular(campo){
+  if (campo.dataset.mascaraOk) return;
+  campo.dataset.mascaraOk = '1';
+  campo.addEventListener('input', () => {
+    let v = campo.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 10) v = v.replace(/^(\d{2})(\d{5})(\d{0,4}).*/, '($1)$2-$3');
+    else if (v.length > 6) v = v.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, '($1)$2-$3');
+    else if (v.length > 2) v = v.replace(/^(\d{2})(\d{0,5}).*/, '($1)$2');
+    else if (v.length > 0) v = v.replace(/^(\d{0,2}).*/, '($1');
+    campo.value = v;
+  });
+}
+
+async function salvarClienteDados(){
+  const c = osAtual?.cliente || {};
+  if(!c.id){
+    fgAlert('Não foi possível identificar o cliente desta OS.');
+    return;
+  }
+
+  const nome = $('edit-cli-nome').value.trim();
+  if(!nome){
+    fgAlert('Nome é obrigatório.');
+    return;
+  }
+
+  const payload = {
+    nome,
+    cpf_cnpj: $('edit-cli-cpf').value.trim(),
+    celular: $('edit-cli-celular').value.trim(),
+    telefone: $('edit-cli-telefone').value.trim(),
+    email: $('edit-cli-email').value.trim(),
+    cep: $('edit-cli-cep').value.trim(),
+    endereco: $('edit-cli-endereco').value.trim(),
+    numero: $('edit-cli-numero').value.trim(),
+    complemento: $('edit-cli-complemento').value.trim(),
+    bairro: $('edit-cli-bairro').value.trim(),
+    cidade: $('edit-cli-cidade').value.trim(),
+    uf: $('edit-cli-uf').value.trim(),
+    observacoes: $('edit-cli-observacoes').value.trim()
+  };
+
+  const r = await fetch('/api/clientes/'+c.id, {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+
+  const d = await r.json();
+  if(!r.ok){
+    fgAlert(d.erro || 'Não foi possível salvar os dados do cliente.');
+    return;
+  }
+
+  fecharDadosCliente();
+  await carregar();
+  fgAlert('Dados do cliente atualizados com sucesso!');
+}
+
+async function salvarEquipamento(){
+  if(osFinalizada) return;
+
+  const e = osAtual?.equipamento || {};
+  if(!e.id){
+    fgAlert('Não foi possível identificar o equipamento desta OS.');
+    return;
+  }
+
+  const payload = {
+    tipo: $('edit-equip-tipo').value.trim(),
+    marca: $('edit-equip-marca').value.trim(),
+    modelo: $('edit-equip-modelo').value.trim(),
+    serie: $('edit-equip-serie').value.trim(),
+    patrimonio: $('edit-equip-patrimonio').value.trim(),
+    data_compra: $('edit-equip-data-compra').value.trim(),
+    nf: $('edit-equip-nf').value.trim(),
+    acessorios: $('edit-equip-acessorios').value.trim(),
+    observacoes: $('edit-equip-observacoes').value.trim()
+  };
+
+  const r = await fetch('/api/equipamentos/'+e.id, {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+
+  const d = await r.json();
+  if(!r.ok){
+    fgAlert(d.erro || 'Não foi possível salvar o equipamento.');
+    return;
+  }
+
+  fecharEditarEquipamento();
+  await carregar();
+  fgAlert('Equipamento atualizado com sucesso!');
+}
+
+document.addEventListener('keydown', function(event){
+  if(event.key === 'Escape'){
+    const modal = $('modal-equipamento');
+    if(modal && !modal.classList.contains('hide')) fecharEditarEquipamento();
+    const modalCli = $('modal-cliente-dados');
+    if(modalCli && !modalCli.classList.contains('hide')) fecharDadosCliente();
+  }
+});
+
+async function excluirOSAtual(){
+  if (!OS_ID || osFinalizada) {
+    if (osFinalizada) fgAlert('Esta OS já foi finalizada e não pode ser excluída.');
+    return;
+  }
+
+  const numero = String(osAtual?.numero_os || OS_ID).padStart(6, '0');
+  if (!(await fgConfirm(
+    'Excluir a OS ' + numero + '?\n\n' +
+    'A OS, serviços, peças, orçamento, financeiro e histórico serão excluídos.\n' +
+    'Esta ação não pode ser desfeita.'
+  ))) return;
+
+  try {
+    const resposta = await fetch('/api/os/' + encodeURIComponent(OS_ID), {
+      method: 'DELETE'
+    });
+    const dados = await resposta.json();
+
+    if (!resposta.ok) {
+      fgAlert(dados.erro || 'Não foi possível excluir a OS.');
+      return;
+    }
+
+    await fgAlert('OS ' + numero + ' excluída com sucesso.');
+    window.location.href = '/';
+  } catch (erro) {
+    console.error(erro);
+    fgAlert('Erro ao excluir a OS.');
+  }
+}
+
+async function carregar(){
+  const r = await fetch('/api/os/'+OS_ID);
+  const d = await r.json();
+  if(!r.ok){fgAlert(d.erro||'Erro ao carregar OS');return;}
+
+  osFinalizada = !!d.finalizado;
+  const btnExcluirOS = $('btn-excluir-os');
+  if (btnExcluirOS) btnExcluirOS.disabled = osFinalizada;
+
+  $('numero').textContent = 'OS '+d.numero_os;
+  $('cliente').textContent = d.cliente?.nome || 'Cliente não identificado';
+
+  const e = d.equipamento || {};
+  $('equipamento').textContent = [e.tipo,e.marca,e.modelo].filter(Boolean).join(' ') || 'Não informado';
+  $('entrada').textContent = d.data_entrada || '—';
+  osAtual = d;
+
+  $('situacao-atual').textContent = d.situacao || '—';
+  $('defeito').value = d.defeito || '';
+  $('problema-identificado').value = d.problema_identificado || '';
+  $('observacoes').value = d.observacoes || '';
+
+  loadSituacoes(d.situacao || SITUACOES[0]);
+  renderItens(d);
+  renderOrcamento(d);
+  atualizarBotaoFinalizar();
+  atualizarBotaoWhatsApp();
+  atualizarBotaoOrcamentoWhatsApp();
+  atualizarBotaoConfirmarOrcamento();
+
+  if (osFinalizada) bloquearEdicao();
+}
+
+function renderItens(d){
+  $('servicos').innerHTML = d.servicos?.length
+    ? d.servicos.map(x => `
+      <div class="item-execucao exec-servico" id="exec-serv-${x.id}">
+        <div class="exec-info">
+          <strong>${esc(x.descricao)}</strong>
+          <small>Quantidade: ${num(x.quantidade)}</small>
+        </div>
+        <div class="exec-total">${money(num(x.quantidade)*num(x.valor))}</div>
+        <div class="exec-acoes">
+          <button type="button" class="exec-editar" onclick="editarServico(${x.id})">✏ EDITAR</button>
+          <button type="button" class="exec-excluir" onclick="excluirServico(${x.id})">EXCLUIR</button>
+        </div>
+      </div>`).join('')
+    : '<div class="sem-itens">Nenhum serviço lançado ainda.</div>';
+
+  $('pecas').innerHTML = d.pecas?.length
+    ? d.pecas.map(x => `
+      <div class="item-execucao exec-peca" id="exec-peca-${x.id}">
+        <div class="exec-info">
+          <strong>${esc(x.descricao)}</strong>
+          <small>Quantidade: ${num(x.quantidade)}</small>
+        </div>
+        <div class="exec-total">${money(num(x.quantidade)*num(x.valor))}</div>
+        <div class="exec-acoes">
+          <button type="button" class="exec-editar" onclick="editarPeca(${x.id})">✏ EDITAR</button>
+          <button type="button" class="exec-excluir" onclick="excluirPeca(${x.id})">EXCLUIR</button>
+        </div>
+      </div>`).join('')
+    : '<div class="sem-itens">Nenhuma peça lançada ainda.</div>';
+
+  $('total-servicos').textContent = money(d.total_servicos);
+  $('total-pecas').textContent = money(d.total_pecas);
+  $('total-os').textContent = money(d.total_os);
+}
+
+function editarServico(id){
+  if(osFinalizada) return;
+  const item=(osAtual?.servicos||[]).find(x=>Number(x.id)===Number(id));
+  if(item) renderEdicaoExecucao('exec-serv-'+id,item,'servico');
+}
+
+function editarPeca(id){
+  if(osFinalizada) return;
+  const item=(osAtual?.pecas||[]).find(x=>Number(x.id)===Number(id));
+  if(item) renderEdicaoExecucao('exec-peca-'+id,item,'peca');
+}
+
+function renderEdicaoExecucao(containerId,item,tipo){
+  if(osFinalizada) return;
+  const container=$(containerId);
+  if(!container) return;
+  const acao=tipo==='servico'?'salvarEdicaoServico':'salvarEdicaoPeca';
+  container.innerHTML=`
+    <div class="exec-edicao">
+      <input id="edit-exec-${tipo}-desc-${item.id}" value="${esc(item.descricao)}" aria-label="Descrição">
+      <input id="edit-exec-${tipo}-qtd-${item.id}" type="number" min="0" step="0.01" value="${num(item.quantidade)}" aria-label="Quantidade">
+      <input id="edit-exec-${tipo}-valor-${item.id}" inputmode="decimal" value="${num(item.valor)}" aria-label="Valor">
+      <div class="exec-edicao-acoes">
+        <button type="button" class="exec-salvar-edicao" onclick="${acao}(${item.id})">SALVAR</button>
+        <button type="button" class="exec-cancelar-edicao" onclick="carregar()">CANCELAR</button>
+      </div>
+    </div>`;
+}
+
+async function salvarEdicaoServico(id){
+  if(osFinalizada)return;
+  const descricao=$('edit-exec-servico-desc-'+id)?.value.trim();
+  const quantidade=num($('edit-exec-servico-qtd-'+id)?.value);
+  const valor=num($('edit-exec-servico-valor-'+id)?.value);
+  if(!descricao){fgAlert('Informe o serviço realizado.');return;}
+  if(quantidade<=0){fgAlert('A quantidade deve ser maior que zero.');return;}
+  const r=await fetch('/api/os/'+OS_ID+'/servicos/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({descricao,quantidade,valor})});
+  const d=await r.json();
+  if(!r.ok){fgAlert(d.erro||'Não foi possível editar o serviço.');return;}
+  await carregar();
+}
+
+async function salvarEdicaoPeca(id){
+  if(osFinalizada)return;
+  const descricao=$('edit-exec-peca-desc-'+id)?.value.trim();
+  const quantidade=num($('edit-exec-peca-qtd-'+id)?.value);
+  const valor=num($('edit-exec-peca-valor-'+id)?.value);
+  if(!descricao){fgAlert('Informe a peça.');return;}
+  if(quantidade<=0){fgAlert('A quantidade deve ser maior que zero.');return;}
+  const r=await fetch('/api/os/'+OS_ID+'/pecas/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({descricao,quantidade,valor})});
+  const d=await r.json();
+  if(!r.ok){fgAlert(d.erro||'Não foi possível editar a peça.');return;}
+  await carregar();
+}
+
+async function salvar(body){
+  const r = await fetch('/api/os/'+OS_ID, {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
+  const d = await r.json();
+  if(!r.ok){fgAlert(d.erro||'Erro ao salvar');return false;}
+  return true;
+}
+
+async function salvarTudo(){
+  if(osFinalizada) return;
+
+  const btn = $('btn-salvar-tudo');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+
+  const ok = await salvar({
+    situacao: $('situacao').value,
+    defeito: $('defeito').value,
+    problema_identificado: $('problema-identificado').value,
+    observacoes: $('observacoes').value
+  });
+
+  if(ok){
+    await carregar();
+    btn.textContent = '✓ Salvo!';
+    setTimeout(() => { btn.textContent = textoOriginal; btn.disabled = osFinalizada; }, 1500);
+  } else {
+    btn.textContent = textoOriginal;
+    btn.disabled = false;
+  }
+}
+
+async function adicionarServico(){
+  if(osFinalizada) return;
+  const descricao = $('servico').value.trim();
+  if(!descricao){fgAlert('Informe o serviço realizado.');return;}
+
+  const r = await fetch('/api/os/'+OS_ID+'/servicos',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      descricao,
+      quantidade:num($('servicoQtd').value)||1,
+      valor:num($('servicoValor').value)
+    })
+  });
+  const d = await r.json();
+  if(!r.ok){fgAlert(d.erro||'Erro ao adicionar serviço.');return;}
+
+  $('servico').value='';
+  $('servicoValor').value='';
+  await carregar();
+}
+
+async function adicionarPeca(){
+  if(osFinalizada) return;
+  const descricao = $('peca').value.trim();
+  if(!descricao){fgAlert('Informe a peça.');return;}
+
+  const r = await fetch('/api/os/'+OS_ID+'/pecas',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      descricao,
+      quantidade:num($('pecaQtd').value)||1,
+      valor:num($('pecaValor').value)
+    })
+  });
+  const d = await r.json();
+  if(!r.ok){fgAlert(d.erro||'Erro ao adicionar peça.');return;}
+
+  $('peca').value='';
+  $('pecaValor').value='';
+  await carregar();
+}
+
+async function excluirServico(id){
+  if(osFinalizada) return;
+  if(!(await fgConfirm('Excluir este serviço?')))return;
+  const r = await fetch('/api/os/'+OS_ID+'/servicos/'+id,{method:'DELETE'});
+  const d = await r.json();
+  if(!r.ok){fgAlert(d.erro||'Erro ao excluir serviço.');return;}
+  await carregar();
+}
+
+async function excluirPeca(id){
+  if(osFinalizada) return;
+  if(!(await fgConfirm('Excluir esta peça?')))return;
+  const r = await fetch('/api/os/'+OS_ID+'/pecas/'+id,{method:'DELETE'});
+  const d = await r.json();
+  if(!r.ok){fgAlert(d.erro||'Erro ao excluir peça.');return;}
+  await carregar();
+}
+
+let avisoFinalizacaoTimeout = null;
+
+function mostrarAvisoFinalizacao(){
+  const aviso = $('aviso-finalizacao');
+  aviso.classList.remove('liberado');
+  $('aviso-icone').textContent = '⚠';
+  $('aviso-titulo').textContent = 'OS ainda não pode ser finalizada';
+  $('aviso-texto').textContent = 'Altere a situação para “Equipamento entregue reparado”, “Equipamento Condenado” ou “Serviço não autorizado”.';
+  aviso.classList.remove('hide');
+
+  clearTimeout(avisoFinalizacaoTimeout);
+  avisoFinalizacaoTimeout = setTimeout(() => aviso.classList.add('hide'), 5000);
+}
+
+function finalizarOS(){
+  if(osFinalizada) return;
+
+  const situacao = $('situacao').value;
+  if(!SITUACOES_FINALIZACAO.has(situacao)){
+    mostrarAvisoFinalizacao();
+    return;
+  }
+
+  $('pgto-status').value = '0';
+  $('pgto-forma').value = '';
+  $('pgto-data').value = '';
+  $('pgto-data-label').classList.add('hide');
+  $('modal-pagamento').classList.remove('hide');
+}
+
+function fecharModalPagamento(){
+  $('modal-pagamento').classList.add('hide');
+}
+
+$('pgto-status').addEventListener('change', () => {
+  const pago = $('pgto-status').value === '1';
+  $('pgto-data-label').classList.toggle('hide', !pago);
+  if (pago && !$('pgto-data').value) {
+    $('pgto-data').value = new Date().toISOString().slice(0, 10);
+  }
+});
+
+async function confirmarFinalizacaoComPagamento(){
+  const situacao = $('situacao').value;
+
+  // Garante que a situação escolhida e os textos estejam salvos antes do encerramento.
+  const salvo = await salvar({
+    situacao,
+    defeito:$('defeito').value,
+    problema_identificado:$('problema-identificado').value,
+    observacoes:$('observacoes').value
+  });
+  if(!salvo) return;
+
+  const r = await fetch('/api/os/'+OS_ID+'/finalizar',{method:'POST'});
+  const d = await r.json();
+  if(!r.ok){fgAlert(d.erro||'Não foi possível finalizar a OS.');return;}
+
+  const pago = $('pgto-status').value === '1';
+  const forma = $('pgto-forma').value;
+  const data = $('pgto-data').value;
+
+  await fetch('/api/financeiro/os/'+OS_ID+'/pagamento', {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({pago, forma_pagamento: forma, data_pagamento: data})
+  });
+
+  fecharModalPagamento();
+  await fgAlert('OS finalizada com sucesso!');
+  await carregar();
+}
+
+
+function renderOrcamento(d){
+  const serv = d.orcamento_servicos || [];
+  const pec = d.orcamento_pecas || [];
+
+  $('orc-servicos').innerHTML = serv.length
+    ? serv.map(x => `
+      <div class="item-linha item-orcamento" id="orc-serv-${x.id}">
+        <div class="orc-item-info">
+          <strong>${esc(x.descricao)}</strong>
+          <small>Quantidade: ${num(x.quantidade)}</small>
+        </div>
+        <div class="orc-item-total">${money(num(x.quantidade)*num(x.valor))}</div>
+        <div class="orc-item-acoes">
+          <button type="button" class="btn-orc-editar" onclick="editarOrcServico(${x.id})">✏ EDITAR</button>
+          <button type="button" class="btn-orc-excluir" onclick="excluirOrcServico(${x.id})">×</button>
+        </div>
+      </div>`).join('')
+    : '<div class="sem-itens">Nenhum serviço no orçamento.</div>';
+
+  $('orc-pecas').innerHTML = pec.length
+    ? pec.map(x => `
+      <div class="item-linha item-orcamento" id="orc-peca-${x.id}">
+        <div class="orc-item-info">
+          <strong>${esc(x.descricao)}</strong>
+          <small>Quantidade: ${num(x.quantidade)}</small>
+        </div>
+        <div class="orc-item-total">${money(num(x.quantidade)*num(x.valor))}</div>
+        <div class="orc-item-acoes">
+          <button type="button" class="btn-orc-editar" onclick="editarOrcPeca(${x.id})">✏ EDITAR</button>
+          <button type="button" class="btn-orc-excluir" onclick="excluirOrcPeca(${x.id})">×</button>
+        </div>
+      </div>`).join('')
+    : '<div class="sem-itens">Nenhuma peça no orçamento.</div>';
+
+  $('total-orcamento').textContent = money(d.total_orcamento);
+}
+
+function renderEdicaoOrcamento(containerId, item, tipo){
+  if(osFinalizada) return;
+
+  const container = $(containerId);
+  if(!container) return;
+
+  const endpoint = tipo === 'servico'
+    ? '/api/os/'+OS_ID+'/orcamento/servicos/'+item.id
+    : '/api/os/'+OS_ID+'/orcamento/pecas/'+item.id;
+
+  const acao = tipo === 'servico'
+    ? 'salvarEdicaoOrcServico'
+    : 'salvarEdicaoOrcPeca';
+
+  container.innerHTML = `
+    <div class="orc-edicao">
+      <input id="edit-${tipo}-desc-${item.id}" value="${esc(item.descricao)}" aria-label="Descrição">
+      <input id="edit-${tipo}-qtd-${item.id}" type="number" min="0" step="0.01" value="${num(item.quantidade)}" aria-label="Quantidade">
+      <input id="edit-${tipo}-valor-${item.id}" inputmode="decimal" value="${num(item.valor)}" aria-label="Valor">
+      <div class="orc-edicao-acoes">
+        <button type="button" class="btn-orc-salvar-edicao" onclick="${acao}(${item.id})">SALVAR</button>
+        <button type="button" class="btn-orc-cancelar-edicao" onclick="carregar()">CANCELAR</button>
+      </div>
+    </div>`;
+}
+
+function editarOrcServico(id){
+  if(osFinalizada) return;
+  const item = (osAtual?.orcamento_servicos || []).find(x => Number(x.id) === Number(id));
+  if(item) renderEdicaoOrcamento('orc-serv-'+id, item, 'servico');
+}
+
+function editarOrcPeca(id){
+  if(osFinalizada) return;
+  const item = (osAtual?.orcamento_pecas || []).find(x => Number(x.id) === Number(id));
+  if(item) renderEdicaoOrcamento('orc-peca-'+id, item, 'peca');
+}
+
+async function salvarEdicaoOrcServico(id){
+  if(osFinalizada) return;
+  const descricao = $('edit-servico-desc-'+id)?.value.trim();
+  const quantidade = num($('edit-servico-qtd-'+id)?.value);
+  const valor = num($('edit-servico-valor-'+id)?.value);
+
+  if(!descricao){ fgAlert('Informe a descrição do serviço.'); return; }
+  if(quantidade <= 0){ fgAlert('A quantidade deve ser maior que zero.'); return; }
+
+  const del = await fetch('/api/os/'+OS_ID+'/orcamento/servicos/'+id,{method:'DELETE'});
+  const dd = await del.json();
+  if(!del.ok){ fgAlert(dd.erro || 'Não foi possível editar o serviço.'); return; }
+
+  const add = await fetch('/api/os/'+OS_ID+'/orcamento/servicos',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({descricao, quantidade, valor})
+  });
+  const da = await add.json();
+
+  if(!add.ok){
+    fgAlert(da.erro || 'Não foi possível salvar a alteração do serviço.');
+    await carregar();
+    return;
+  }
+
+  await carregar();
+}
+
+async function salvarEdicaoOrcPeca(id){
+  if(osFinalizada) return;
+  const descricao = $('edit-peca-desc-'+id)?.value.trim();
+  const quantidade = num($('edit-peca-qtd-'+id)?.value);
+  const valor = num($('edit-peca-valor-'+id)?.value);
+
+  if(!descricao){ fgAlert('Informe a descrição da peça.'); return; }
+  if(quantidade <= 0){ fgAlert('A quantidade deve ser maior que zero.'); return; }
+
+  const del = await fetch('/api/os/'+OS_ID+'/orcamento/pecas/'+id,{method:'DELETE'});
+  const dd = await del.json();
+  if(!del.ok){ fgAlert(dd.erro || 'Não foi possível editar a peça.'); return; }
+
+  const add = await fetch('/api/os/'+OS_ID+'/orcamento/pecas',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({descricao, quantidade, valor})
+  });
+  const da = await add.json();
+
+  if(!add.ok){
+    fgAlert(da.erro || 'Não foi possível salvar a alteração da peça.');
+    await carregar();
+    return;
+  }
+
+  await carregar();
+}
+
+async function adicionarOrcServico(){
+  if(osFinalizada)return;
+  const descricao=$('orcServico').value.trim(); if(!descricao){fgAlert('Informe o serviço do orçamento.');return;}
+  const r=await fetch('/api/os/'+OS_ID+'/orcamento/servicos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({descricao,quantidade:num($('orcServicoQtd').value)||1,valor:num($('orcServicoValor').value)})});
+  const d=await r.json(); if(!r.ok){fgAlert(d.erro||'Erro ao adicionar serviço ao orçamento.');return;}
+  $('orcServico').value='';$('orcServicoValor').value='';await carregar();
+}
+
+async function adicionarOrcPeca(){
+  if(osFinalizada)return;
+  const descricao=$('orcPeca').value.trim(); if(!descricao){fgAlert('Informe a peça do orçamento.');return;}
+  const r=await fetch('/api/os/'+OS_ID+'/orcamento/pecas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({descricao,quantidade:num($('orcPecaQtd').value)||1,valor:num($('orcPecaValor').value)})});
+  const d=await r.json(); if(!r.ok){fgAlert(d.erro||'Erro ao adicionar peça ao orçamento.');return;}
+  $('orcPeca').value='';$('orcPecaValor').value='';await carregar();
+}
+
+async function excluirOrcServico(id){ if(osFinalizada)return; if(!(await fgConfirm('Excluir este serviço do orçamento?')))return; const r=await fetch('/api/os/'+OS_ID+'/orcamento/servicos/'+id,{method:'DELETE'}); const d=await r.json(); if(!r.ok){fgAlert(d.erro||'Erro ao excluir.');return;} await carregar(); }
+async function excluirOrcPeca(id){ if(osFinalizada)return; if(!(await fgConfirm('Excluir esta peça do orçamento?')))return; const r=await fetch('/api/os/'+OS_ID+'/orcamento/pecas/'+id,{method:'DELETE'}); const d=await r.json(); if(!r.ok){fgAlert(d.erro||'Erro ao excluir.');return;} await carregar(); }
+
+function abrirOrcamento(){ window.open('/orcamento/'+OS_ID,'_blank'); }
+
+function montarMensagemOrcamento(){
+  const cliente=osAtual?.cliente?.nome || 'cliente'; const numero=osAtual?.numero_os || OS_ID;
+  const linhas=[];
+  (osAtual?.orcamento_servicos||[]).forEach(x=>linhas.push(`🔧 ${x.descricao} — ${money(num(x.quantidade)*num(x.valor))}`));
+  (osAtual?.orcamento_pecas||[]).forEach(x=>linhas.push(`🔩 ${x.descricao} — ${money(num(x.quantidade)*num(x.valor))}`));
+  return `Olá, ${cliente}! Após a análise de sua máquina, o problema detectado segue conforme orçamento:\n\n${linhas.join('\n') || 'Orçamento ainda sem itens.'}\n\n💰 Total do orçamento: ${money(osAtual?.total_orcamento)}\n\nFicamos no aguardo da sua autorização para realizar o serviço.\n\nFG Computadores — OS nº ${numero}`;
+}
+
+function atualizarBotaoOrcamentoWhatsApp(){
+  const btn = $('btn-orcamento-whatsapp');
+  if (!btn) return;
+
+  const total = num(osAtual?.total_orcamento);
+  const situacao = $('situacao').value;
+  const pode = !osFinalizada &&
+    total > 0 &&
+    ['Máquina em análise','Orçamento enviado','Aguardando autorização do orçamento'].includes(situacao);
+
+  if (!pode) {
+    btn.classList.add('hide');
+    return;
+  }
+
+  btn.classList.remove('hide');
+  btn.textContent = situacao === 'Orçamento enviado'
+    ? '📲 REENVIAR ORÇAMENTO'
+    : '📲 ENVIAR ORÇAMENTO';
+}
+
+function atualizarBotaoConfirmarOrcamento(){
+  const btn = $('btn-confirmar-orcamento');
+  if (!btn) return;
+
+  const pode = !osFinalizada &&
+    num(osAtual?.total_orcamento) > 0 &&
+    $('situacao').value === 'Aguardando autorização do orçamento';
+
+  btn.classList.toggle('hide', !pode);
+}
+
+async function confirmarOrcamento(){
+  if(osFinalizada) return;
+
+  if($('situacao').value !== 'Aguardando autorização do orçamento'){
+    fgAlert('Primeiro coloque a OS em "Aguardando autorização do orçamento".');
+    return;
+  }
+
+  if(num(osAtual?.total_orcamento) <= 0){
+    fgAlert('Não existe orçamento lançado para confirmar.');
+    return;
+  }
+
+  if(!(await fgConfirm('Confirmar que o cliente autorizou este orçamento?\n\nOs serviços e peças do orçamento serão lançados na execução.'))){
+    return;
+  }
+
+  // Usa a rota PUT que já existe no FG_WEB. Ao mudar para
+  // "Autorizado, Reparo em andamento", o backend aproveita
+  // automaticamente o orçamento como base da execução.
+  const salvo = await salvar({situacao:'Autorizado, Reparo em andamento'});
+  if(!salvo) return;
+
+  await fgAlert('Orçamento confirmado! Os serviços e peças foram lançados na execução.');
+  await carregar();
+}
+
+async function enviarOrcamentoWhatsApp(){
+  if(osFinalizada)return;
+  if(num(osAtual?.total_orcamento)<=0){fgAlert('Lance pelo menos um item no orçamento antes de enviar.');return;}
+
+  const telefone=osAtual?.cliente?.celular || osAtual?.cliente?.telefone || '';
+  let numero=String(telefone).replace(/\D/g,'');
+  if(!numero){fgAlert('Este cliente não possui celular/telefone cadastrado.');return;}
+  if(numero.length===10 || numero.length===11) numero='55'+numero;
+
+  const mensagem=montarMensagemOrcamento();
+  const url='https://wa.me/'+numero+'?text='+encodeURIComponent(mensagem);
+
+  const janela=window.open(url,'_blank','noopener,noreferrer');
+  if(!janela){
+    window.location.href=url;
+    return;
+  }
+
+  try{
+    const registro=await fetch('/api/os/'+OS_ID+'/orcamento/whatsapp',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({situacao:'Orçamento enviado'})
+    });
+    const dados=await registro.json();
+    if(!registro.ok){
+      fgAlert(dados.erro || 'Não foi possível registrar o envio do orçamento.');
+      return;
+    }
+
+    await salvar({situacao:'Orçamento enviado'});
+    await carregar();
+  }catch(e){
+    console.warn('Não foi possível registrar o envio do orçamento.', e);
+  }
+}
+
+// Inicializa a tela e popula a lista de situações.
+carregar().catch(e => {
+  console.error('Erro ao carregar a OS:', e);
+});
+
+
+</script>
+{% endblock %}
